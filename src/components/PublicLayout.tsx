@@ -1,7 +1,14 @@
-import { ReactNode } from 'react';
-import { Truck, Users, FileText, DollarSign, LogIn, MessageSquare, Siren } from 'lucide-react';
+import { ReactNode, useState } from 'react';
+import { Truck, Users, LogIn, Car, Tag, MessageSquare, Siren, Menu, X } from 'lucide-react';
 
-export type PublicPage = 'home' | 'citizen' | 'login' | 'complaint' | 'rates' | 'emergency';
+export type PublicPage =
+  | 'home'
+  | 'citizen'
+  | 'vehicles'
+  | 'rates'
+  | 'complaint'
+  | 'emergency'
+  | 'login';
 
 interface Props {
   children: ReactNode;
@@ -9,7 +16,18 @@ interface Props {
   onNavigate: (page: PublicPage) => void;
 }
 
+const navLinks: { id: PublicPage; label: string; icon: ReactNode }[] = [
+  { id: 'home', label: 'หน้าแรก', icon: <Truck size={15} /> },
+  { id: 'citizen', label: 'ระบบประชาชน', icon: <Users size={15} /> },
+  { id: 'vehicles', label: 'ตรวจสอบยานพาหนะ', icon: <Car size={15} /> },
+  { id: 'rates', label: 'อัตราค่าบริการ', icon: <Tag size={15} /> },
+  { id: 'complaint', label: 'ร้องเรียน', icon: <MessageSquare size={15} /> },
+  { id: 'emergency', label: 'แจ้งเหตุฉุกเฉิน', icon: <Siren size={15} /> },
+];
+
 export function PublicLayout({ children, currentPage, onNavigate }: Props) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-navy-900 flex flex-col">
       {/* Top Nav */}
@@ -27,44 +45,64 @@ export function PublicLayout({ children, currentPage, onNavigate }: Props) {
               </div>
             </button>
 
-            {/* Nav Links */}
-            <nav className="hidden md:flex items-center gap-1">
-              <NavLink active={currentPage === 'home'} onClick={() => onNavigate('home')} icon={<FileText size={15} />}>
-                หน้าแรก
-              </NavLink>
-              <NavLink active={currentPage === 'citizen'} onClick={() => onNavigate('citizen')} icon={<Users size={15} />}>
-                ระบบประชาชน
-              </NavLink>
-              <NavLink active={currentPage === 'rates'} onClick={() => onNavigate('rates')} icon={<DollarSign size={15} />}>
-                อัตราค่าบริการ
-              </NavLink>
-              <NavLink active={currentPage === 'complaint'} onClick={() => onNavigate('complaint')} icon={<MessageSquare size={15} />}>
-                ร้องเรียน
-              </NavLink>
-              <NavLink active={currentPage === 'emergency'} onClick={() => onNavigate('emergency')} icon={<Siren size={15} />}>
-                แจ้งเหตุ
-              </NavLink>
+            {/* Desktop Nav Links */}
+            <nav className="hidden lg:flex items-center gap-1">
+              {navLinks.map((link) => (
+                <NavLink key={link.id} active={currentPage === link.id} onClick={() => onNavigate(link.id)} icon={link.icon}>
+                  {link.label}
+                </NavLink>
+              ))}
             </nav>
 
-            {/* Right Actions */}
+            {/* Login Button */}
             <button
               onClick={() => onNavigate('login')}
-              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-navy-900 font-semibold px-4 py-2 rounded-lg text-sm transition-all"
+              className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-navy-900 font-semibold px-4 py-2 rounded-lg text-sm transition-all flex-shrink-0"
             >
               <LogIn size={15} />
-              เข้าสู่ระบบเจ้าหน้าที่
+              <span className="hidden sm:inline">เข้าสู่ระบบเจ้าหน้าที่</span>
+            </button>
+
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="lg:hidden text-gray-400 hover:text-white ml-1"
+            >
+              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Nav Dropdown */}
+        {mobileOpen && (
+          <div className="lg:hidden border-t border-blue-900/40 bg-navy-800">
+            <nav className="max-w-7xl mx-auto px-4 py-2 flex flex-col gap-1">
+              {navLinks.map((link) => (
+                <button
+                  key={link.id}
+                  onClick={() => { onNavigate(link.id); setMobileOpen(false); }}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    currentPage === link.id
+                      ? 'bg-blue-900/60 text-amber-400'
+                      : 'text-gray-300 hover:text-white hover:bg-navy-700'
+                  }`}
+                >
+                  {link.icon}
+                  {link.label}
+                </button>
+              ))}
+            </nav>
+          </div>
+        )}
       </header>
 
-      {/* Mobile Nav */}
-      <div className="md:hidden bg-navy-800 border-b border-blue-900/50 px-4 py-2 flex gap-1.5 overflow-x-auto">
-        <MobileNavLink active={currentPage === 'home'} onClick={() => onNavigate('home')}>หน้าแรก</MobileNavLink>
-        <MobileNavLink active={currentPage === 'citizen'} onClick={() => onNavigate('citizen')}>ระบบประชาชน</MobileNavLink>
-        <MobileNavLink active={currentPage === 'rates'} onClick={() => onNavigate('rates')}>อัตราค่าบริการ</MobileNavLink>
-        <MobileNavLink active={currentPage === 'complaint'} onClick={() => onNavigate('complaint')}>ร้องเรียน</MobileNavLink>
-        <MobileNavLink active={currentPage === 'emergency'} onClick={() => onNavigate('emergency')}>แจ้งเหตุ</MobileNavLink>
+      {/* Mobile horizontal scroll nav (always visible on mobile) */}
+      <div className="lg:hidden bg-navy-800 border-b border-blue-900/50 px-4 py-2 flex gap-1.5 overflow-x-auto">
+        {navLinks.map((link) => (
+          <MobileNavLink key={link.id} active={currentPage === link.id} onClick={() => onNavigate(link.id)}>
+            {link.label}
+          </MobileNavLink>
+        ))}
       </div>
 
       <main className="flex-1">{children}</main>
@@ -103,7 +141,7 @@ function MobileNavLink({ children, active, onClick }: { children: ReactNode; act
   return (
     <button
       onClick={onClick}
-      className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
+      className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${
         active ? 'bg-blue-900/60 text-amber-400' : 'text-gray-400'
       }`}
     >

@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import {
   Truck, LayoutDashboard, Shield, DollarSign, Megaphone,
-  Users, LogOut, Menu, X, ChevronRight, Tag, MessageSquare, Siren,
+  Users, LogOut, Menu, X, ChevronRight, Tag, MessageSquare, Siren, Car, UserCog,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { RANK_LABELS, DEPARTMENT_LABELS } from '../lib/types';
@@ -14,7 +14,9 @@ export type OfficerPage =
   | 'announcements'
   | 'service-rates'
   | 'officer-management'
-  | 'emergency';
+  | 'citizen-management'
+  | 'emergency'
+  | 'vehicles';
 
 interface Props {
   children: ReactNode;
@@ -35,10 +37,12 @@ const navItems: NavItem[] = [
   { id: 'operations', label: 'ปฏิบัติการ', icon: <Shield size={18} />, commissionerOnly: false },
   { id: 'service-fees', label: 'ค่าบริการ', icon: <DollarSign size={18} />, commissionerOnly: false },
   { id: 'emergency', label: 'แจ้งเหตุฉุกเฉิน', icon: <Siren size={18} />, commissionerOnly: false },
+  { id: 'vehicles', label: 'ยานพาหนะ', icon: <Car size={18} />, commissionerOnly: false },
   { id: 'complaints', label: 'เรื่องร้องเรียน', icon: <MessageSquare size={18} />, commissionerOnly: true },
   { id: 'announcements', label: 'ประกาศ', icon: <Megaphone size={18} />, commissionerOnly: true },
   { id: 'service-rates', label: 'อัตราค่าบริการ', icon: <Tag size={18} />, commissionerOnly: true },
   { id: 'officer-management', label: 'จัดการเจ้าหน้าที่', icon: <Users size={18} />, commissionerOnly: true },
+  { id: 'citizen-management', label: 'จัดการข้อมูลประชาชน', icon: <UserCog size={18} />, commissionerOnly: true },
 ];
 
 export function OfficerLayout({ children, currentPage, onNavigate, onLogout }: Props) {

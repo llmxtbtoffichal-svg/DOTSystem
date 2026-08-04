@@ -1,0 +1,708 @@
+import { ReactNode, useEffect, useState } from 'react';
+import {
+  Search, UserCog, Plus, Edit2, Trash2, Car, CreditCard, X,
+  AlertCircle, CheckCircle2, Lock, User, FileText, Clock, MapPin,
+  Bike, Truck as TowTruck, CarFront, Shield, Save,
+} from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import {
+  Citizen, CitizenStatus, Vehicle, License,
+  VEHICLE_TYPE_LABELS, VEHICLE_CATEGORY_LABELS, CITIZEN_STATUS_LABELS,
+  VehicleType,
+} from '../../lib/types';
+import { useAuth } from '../../lib/AuthContext';
+import { Badge } from '../../components/Badge';
+import { Modal, ConfirmDialog } from '../../components/Modal';
+
+type Tab = 'overview' | 'vehicles' | 'licenses';
+
+export function CitizenManagementPage() {
+  const { officer } = useAuth();
+  const [tab, setTab] = useState<Tab>('overview');
+  const [searchQ, setSearchQ] = useState('');
+  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const [citizens, setCitizens] = useState<Citizen[]>([]);
+  const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(null);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [licenses, setLicenses] = useState<License[]>([]);
+
+  const [showCitizenForm, setShowCitizenForm] = useState(false);
+  const [editingCitizen, setEditingCitizen] = useState<Citizen | null>(null);
+  const [citizenForm, setCitizenForm] = useState({ roblox_username: '', discord_username: '', status: 'normal' as CitizenStatus, notes: '' });
+
+  const [showVehicleForm, setShowVehicleForm] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [vehicleForm, setVehicleForm] = useState({
+    license_plate: '', owner_name: '', vehicle_type: 'sedan' as VehicleType,
+    color: '', brand_model: '', vehicle_category: 'personal', is_impounded: false,
+    impound_reason: '', impound_location: '', notes: '',
+  });
+
+  const [showLicenseForm, setShowLicenseForm] = useState(false);
+  const [editingLicense, setEditingLicense] = useState<License | null>(null);
+  const [licenseForm, setLicenseForm] = useState({
+    license_type: 'driver', license_number: '', issue_date: '', expiry_date: '',
+    status: 'active', notes: '',
+  });
+
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'citizen' | 'vehicle' | 'license'; id: string; name: string } | null>(null);
+
+  useEffect(() => { fetchCitizens(); }, []);
+
+  async function fetchCitizens() {
+    setLoading(true);
+    const { data } = await supabase.from('citizens').select('*').order('updated_at', { ascending: false });
+    setCitizens(data ?? []);
+    setLoading(false);
+  }
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!searchQ.trim()) { setSearched(true); return; }
+    setLoading(true);
+    const q = searchQ.trim();
+    const { data } = await supabase
+      .from('citizens')
+      .select('*')
+      .or('roblox_username.ilike.%' + q + '%,discord_username.ilike.%' + q + '%')
+      .order('updated_at', { ascending: false });
+    setCitizens(data ?? []);
+    setSearched(true);
+    setLoading(false);
+  }
+
+  async function selectCitizen(c: Citizen) {
+    setSelectedCitizen(c);
+    setTab('overview');
+    await Promise.all([fetchVehicles(c.id), fetchLicenses(c.id)]);
+  }
+
+  async function fetchVehicles(citizenId: string) {
+    const { data } = await supabase.from('vehicles').select('*').eq('citizen_id', citizenId).order('created_at', { ascending: false });
+    setVehicles(data ?? []);
+  }
+
+  async function fetchLicenses(citizenId: string) {
+    const { data } = await supabase.from('licenses').select('*').eq('citizen_id', citizenId).order('created_at', { ascending: false });
+    setLicenses(data ?? []);
+  }
+
+  /* ===== Citizen CRUD ===== */
+  function openAddCitizen() {
+    setEditingCitizen(null);
+    setCitizenForm({ roblox_username: '', discord_username: '', status: 'normal', notes: '' });
+    setShowCitizenForm(true);
+  }
+
+  function openEditCitizen(c: Citizen) {
+    setEditingCitizen(c);
+    setCitizenForm({ roblox_username: c.roblox_username, discord_username: c.discord_username || '', status: c.status, notes: c.notes || '' });
+    setShowCitizenForm(true);
+  }
+
+  async function handleCitizenSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!citizenForm.roblox_username.trim()) return;
+    if (editingCitizen) {
+      await supabase.from('citizens').update({
+        roblox_username: citizenForm.roblox_username.trim(),
+        discord_username: citizenForm.discord_username.trim() || null,
+        status: citizenForm.status,
+        notes: citizenForm.notes.trim() || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', editingCitizen.id);
+      if (selectedCitizen?.id === editingCitizen.id) {
+        setSelectedCitizen({ ...editingCitizen, ...citizenForm, discord_username: citizenForm.discord_username.trim() || null, notes: citizenForm.notes.trim() || null });
+      }
+    } else {
+      const { data } = await supabase.from('citizens').insert({
+        roblox_username: citizenForm.roblox_username.trim(),
+        discord_username: citizenForm.discord_username.trim() || null,
+        status: citizenForm.status,
+        notes: citizenForm.notes.trim() || null,
+      }).select().single();
+      if (data) await selectCitizen(data);
+    }
+    setShowCitizenForm(false);
+    await fetchCitizens();
+  }
+
+  async function deleteCitizen(id: string) {
+    await supabase.from('citizens').delete().eq('id', id);
+    if (selectedCitizen?.id === id) {
+      setSelectedCitizen(null);
+      setVehicles([]);
+      setLicenses([]);
+    }
+    await fetchCitizens();
+  }
+
+  /* ===== Vehicle CRUD ===== */
+  function openAddVehicle() {
+    if (!selectedCitizen) return;
+    setEditingVehicle(null);
+    setVehicleForm({
+      license_plate: '', owner_name: selectedCitizen.roblox_username,
+      vehicle_type: 'sedan' as VehicleType, color: '', brand_model: '',
+      vehicle_category: 'personal', is_impounded: false,
+      impound_reason: '', impound_location: '', notes: '',
+    });
+    setShowVehicleForm(true);
+  }
+
+  function openEditVehicle(v: Vehicle) {
+    setEditingVehicle(v);
+    setVehicleForm({
+      license_plate: v.license_plate, owner_name: v.owner_name || '',
+      vehicle_type: v.vehicle_type, color: v.color || '', brand_model: v.brand_model || '',
+      vehicle_category: v.vehicle_category || 'personal', is_impounded: v.is_impounded,
+      impound_reason: v.impound_reason || '', impound_location: v.impound_location || '',
+      notes: v.notes || '',
+    });
+    setShowVehicleForm(true);
+  }
+
+  async function handleVehicleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCitizen || !vehicleForm.license_plate.trim()) return;
+    const payload = {
+      license_plate: vehicleForm.license_plate.trim().toUpperCase().split(' ').join(''),
+      owner_name: vehicleForm.owner_name.trim() || null,
+      vehicle_type: vehicleForm.vehicle_type,
+      color: vehicleForm.color.trim() || null,
+      brand_model: vehicleForm.brand_model.trim() || null,
+      vehicle_category: vehicleForm.vehicle_category,
+      citizen_id: selectedCitizen.id,
+      is_impounded: vehicleForm.is_impounded,
+      impound_reason: vehicleForm.is_impounded ? (vehicleForm.impound_reason.trim() || null) : null,
+      impound_location: vehicleForm.is_impounded ? (vehicleForm.impound_location.trim() || null) : null,
+      impounded_at: vehicleForm.is_impounded && !editingVehicle?.is_impounded ? new Date().toISOString() : editingVehicle?.impounded_at || null,
+      impounded_by: vehicleForm.is_impounded && !editingVehicle?.is_impounded ? officer?.id : editingVehicle?.impounded_by || null,
+      impounded_by_name: vehicleForm.is_impounded && !editingVehicle?.is_impounded ? officer?.name : editingVehicle?.impounded_by_name || null,
+      notes: vehicleForm.notes.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    if (editingVehicle) {
+      await supabase.from('vehicles').update(payload).eq('id', editingVehicle.id);
+    } else {
+      await supabase.from('vehicles').insert(payload);
+    }
+    setShowVehicleForm(false);
+    await fetchVehicles(selectedCitizen.id);
+  }
+
+  async function deleteVehicle(id: string) {
+    if (!selectedCitizen) return;
+    await supabase.from('vehicles').delete().eq('id', id);
+    await fetchVehicles(selectedCitizen.id);
+  }
+
+  /* ===== License CRUD ===== */
+  function openAddLicense() {
+    if (!selectedCitizen) return;
+    setEditingLicense(null);
+    setLicenseForm({
+      license_type: 'driver', license_number: '',
+      issue_date: new Date().toISOString().split('T')[0],
+      expiry_date: '', status: 'active', notes: '',
+    });
+    setShowLicenseForm(true);
+  }
+
+  function openEditLicense(l: License) {
+    setEditingLicense(l);
+    setLicenseForm({
+      license_type: l.license_type, license_number: l.license_number || '',
+      issue_date: l.issue_date ? l.issue_date.split('T')[0] : '',
+      expiry_date: l.expiry_date ? l.expiry_date.split('T')[0] : '',
+      status: l.status, notes: l.notes || '',
+    });
+    setShowLicenseForm(true);
+  }
+
+  async function handleLicenseSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCitizen) return;
+    const payload = {
+      roblox_username: selectedCitizen.roblox_username,
+      discord_username: selectedCitizen.discord_username,
+      citizen_id: selectedCitizen.id,
+      license_type: licenseForm.license_type,
+      license_number: licenseForm.license_number.trim() || null,
+      issue_date: licenseForm.issue_date ? new Date(licenseForm.issue_date).toISOString() : new Date().toISOString(),
+      expiry_date: licenseForm.expiry_date ? new Date(licenseForm.expiry_date).toISOString() : null,
+      status: licenseForm.status,
+      notes: licenseForm.notes.trim() || null,
+      issued_by: editingLicense?.issued_by ?? officer?.id ?? null,
+      issued_by_name: editingLicense?.issued_by_name ?? officer?.name ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (editingLicense) {
+      await supabase.from('licenses').update(payload).eq('id', editingLicense.id);
+    } else {
+      await supabase.from('licenses').insert(payload);
+    }
+    setShowLicenseForm(false);
+    await fetchLicenses(selectedCitizen.id);
+  }
+
+  async function deleteLicense(id: string) {
+    if (!selectedCitizen) return;
+    await supabase.from('licenses').delete().eq('id', id);
+    await fetchLicenses(selectedCitizen.id);
+  }
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) return '-';
+    return new Date(iso).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+
+  const vehicleIcon = (type: string) => {
+    switch (type) {
+      case 'motorcycle': return <Bike size={16} />;
+      case 'pickup': return <TowTruck size={16} />;
+      case 'truck': return <TowTruck size={16} />;
+      case 'van': return <CarFront size={16} />;
+      default: return <Car size={16} />;
+    }
+  };
+
+  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
+    { id: 'overview', label: 'ข้อมูลรวม', icon: <User size={16} /> },
+    { id: 'vehicles', label: 'ยานพาหนะ', icon: <Car size={16} /> },
+    { id: 'licenses', label: 'ใบอนุญาต', icon: <CreditCard size={16} /> },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="section-title">จัดการข้อมูลประชาชน</h1>
+          <p className="section-subtitle">ค้นหาและจัดการข้อมูลประชาชน — สำหรับหัวหน้ากรมเท่านั้น</p>
+        </div>
+        <button onClick={openAddCitizen} className="btn-primary flex items-center gap-2">
+          <Plus size={16} /> เพิ่มประชาชน
+        </button>
+      </div>
+
+      {/* Search */}
+      <form onSubmit={handleSearch} className="card p-4 mb-6">
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+            <input
+              className="input-field pl-9"
+              placeholder="ค้นหาด้วย Roblox หรือ Discord Username..."
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+            />
+          </div>
+          <button type="submit" disabled={loading} className="btn-primary px-6">
+            {loading ? 'กำลังค้นหา...' : 'ค้นหา'}
+          </button>
+        </div>
+      </form>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Citizen List */}
+        <div className="lg:col-span-1">
+          <h2 className="text-sm font-semibold text-gray-400 mb-3">รายการประชาชน ({citizens.length})</h2>
+          <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+            {citizens.length === 0 && (
+              <div className="card p-6 text-center">
+                <UserCog size={28} className="text-gray-600 mx-auto mb-2" />
+                <p className="text-gray-400 text-sm">{searched ? 'ไม่พบข้อมูล' : 'ยังไม่มีข้อมูลประชาชน'}</p>
+              </div>
+            )}
+            {citizens.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => selectCitizen(c)}
+                className={'w-full text-left card p-3 transition-all hover:border-amber-500/40 ' + (selectedCitizen?.id === c.id ? 'border-amber-500/50 bg-amber-500/5' : '')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="text-white text-sm font-medium truncate">{c.roblox_username}</div>
+                    {c.discord_username && <div className="text-gray-500 text-xs truncate">{c.discord_username}</div>}
+                  </div>
+                  <CitizenStatusBadge status={c.status} />
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Detail Panel */}
+        <div className="lg:col-span-2">
+          {!selectedCitizen ? (
+            <div className="card p-12 text-center">
+              <UserCog size={40} className="text-gray-600 mx-auto mb-3" />
+              <p className="text-gray-400 text-sm">เลือกประชาชนจากรายการด้านซ้าย หรือกด "เพิ่มประชาชน" เพื่อเริ่มต้น</p>
+            </div>
+          ) : (
+            <>
+              {/* Tabs */}
+              <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
+                {tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTab(t.id)}
+                    className={'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ' + (tab === t.id ? 'bg-amber-500 text-navy-900' : 'bg-navy-800 text-gray-400 hover:text-white border border-blue-900/40')}
+                  >
+                    {t.icon}
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Overview Tab */}
+              {tab === 'overview' && (
+                <div className="card p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center">
+                        <User size={24} className="text-blue-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{selectedCitizen.roblox_username}</h3>
+                        {selectedCitizen.discord_username && <p className="text-gray-500 text-sm">{selectedCitizen.discord_username}</p>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditCitizen(selectedCitizen)} className="btn-secondary px-3 py-1.5 text-sm flex items-center gap-1.5">
+                        <Edit2 size={14} /> แก้ไข
+                      </button>
+                      <button onClick={() => setConfirmDelete({ type: 'citizen', id: selectedCitizen.id, name: selectedCitizen.roblox_username })} className="bg-red-500/10 text-red-400 border border-red-500/20 px-3 py-1.5 rounded-lg text-sm hover:bg-red-500/20 flex items-center gap-1.5">
+                        <Trash2 size={14} /> ลบ
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-blue-900/30">
+                    <DetailItem icon={<User size={14} />} label="Roblox Username" value={selectedCitizen.roblox_username} />
+                    <DetailItem icon={<User size={14} />} label="Discord Username" value={selectedCitizen.discord_username || '-'} />
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Shield size={14} className="text-amber-400" /> สถานะ</div>
+                      <CitizenStatusBadge status={selectedCitizen.status} />
+                    </div>
+                    <DetailItem icon={<Clock size={14} />} label="ลงทะเบียนเมื่อ" value={formatDate(selectedCitizen.created_at)} />
+                  </div>
+
+                  {selectedCitizen.notes && (
+                    <div className="mt-4 pt-4 border-t border-blue-900/30">
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1"><FileText size={14} className="text-amber-400" /> หมายเหตุส่วนตัว</div>
+                      <div className="bg-navy-900/50 rounded-lg p-3 text-gray-300 text-sm">{selectedCitizen.notes}</div>
+                    </div>
+                  )}
+
+                  {/* Quick stats */}
+                  <div className="mt-4 pt-4 border-t border-blue-900/30 grid grid-cols-2 gap-3">
+                    <div className="bg-navy-900/50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-white">{vehicles.length}</div>
+                      <div className="text-xs text-gray-500">ยานพาหนะ</div>
+                    </div>
+                    <div className="bg-navy-900/50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-white">{licenses.length}</div>
+                      <div className="text-xs text-gray-500">ใบอนุญาต</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Vehicles Tab */}
+              {tab === 'vehicles' && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-400">ยานพาหนะในครอบครอง ({vehicles.length})</h3>
+                    <button onClick={openAddVehicle} className="btn-primary px-4 py-1.5 text-sm flex items-center gap-1.5">
+                      <Plus size={14} /> เพิ่มยานพาหนะ
+                    </button>
+                  </div>
+                  {vehicles.length === 0 ? (
+                    <div className="card p-8 text-center">
+                      <Car size={28} className="text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">ยังไม่มียานพาหนะในครอบครอง</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {vehicles.map((v) => (
+                        <div key={v.id} className={'card p-4 ' + (v.is_impounded ? 'border-red-500/30' : 'border-emerald-500/20')}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={'w-10 h-10 rounded-lg flex items-center justify-center ' + (v.is_impounded ? 'bg-red-500/10 border border-red-500/30' : 'bg-emerald-500/10 border border-emerald-500/20')}>
+                                {v.is_impounded ? <Lock size={18} className="text-red-400" /> : vehicleIcon(v.vehicle_type)}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-white font-semibold">{v.license_plate}</span>
+                                  {v.is_impounded && <Badge variant="danger">ถูกยึด</Badge>}
+                                </div>
+                                <div className="text-gray-500 text-xs mt-0.5">
+                                  {VEHICLE_TYPE_LABELS[v.vehicle_type]} · {v.brand_model || '-'} · {v.color || '-'}
+                                </div>
+                                <div className="text-gray-500 text-xs">
+                                  หมวด: {VEHICLE_CATEGORY_LABELS[v.vehicle_category || 'personal'] || v.vehicle_category}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex gap-1.5">
+                              <button onClick={() => openEditVehicle(v)} className="bg-navy-700 text-gray-400 hover:text-white p-1.5 rounded-lg"><Edit2 size={14} /></button>
+                              <button onClick={() => setConfirmDelete({ type: 'vehicle', id: v.id, name: v.license_plate })} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 p-1.5 rounded-lg"><Trash2 size={14} /></button>
+                            </div>
+                          </div>
+                          {v.is_impounded && v.impound_reason && (
+                            <div className="mt-2 pt-2 border-t border-blue-900/30 text-xs text-red-400">
+                              เหตุผลที่ยึด: {v.impound_reason} · สถานที่: {v.impound_location || '-'}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Licenses Tab */}
+              {tab === 'licenses' && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-400">ใบอนุญาต ({licenses.length})</h3>
+                    <button onClick={openAddLicense} className="btn-primary px-4 py-1.5 text-sm flex items-center gap-1.5">
+                      <Plus size={14} /> เพิ่มใบอนุญาต
+                    </button>
+                  </div>
+                  {licenses.length === 0 ? (
+                    <div className="card p-8 text-center">
+                      <CreditCard size={28} className="text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">ยังไม่มีใบอนุญาต</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {licenses.map((l) => (
+                        <div key={l.id} className={'card p-4 ' + (l.status === 'active' ? 'border-emerald-500/20' : l.status === 'expired' ? 'border-red-500/30' : 'border-amber-500/30')}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-500/10 border border-blue-500/20">
+                                <CreditCard size={18} className="text-blue-400" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-white font-semibold">{l.license_type === 'driver' ? 'ใบขับขี่' : l.license_type}</span>
+                                  {l.license_number && <span className="text-gray-500 text-xs">#{l.license_number}</span>}
+                                </div>
+                                <div className="text-gray-500 text-xs mt-0.5">
+                                  ออก: {formatDate(l.issue_date)} · หมดอายุ: {formatDate(l.expiry_date)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <LicenseStatusBadge status={l.status} />
+                              <button onClick={() => openEditLicense(l)} className="bg-navy-700 text-gray-400 hover:text-white p-1.5 rounded-lg"><Edit2 size={14} /></button>
+                              <button onClick={() => setConfirmDelete({ type: 'license', id: l.id, name: l.license_type })} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 p-1.5 rounded-lg"><Trash2 size={14} /></button>
+                            </div>
+                          </div>
+                          {l.notes && <div className="mt-2 pt-2 border-t border-blue-900/30 text-xs text-gray-500">{l.notes}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Citizen Form Modal */}
+      {showCitizenForm && (
+        <Modal title={editingCitizen ? 'แก้ไขข้อมูลประชาชน' : 'เพิ่มประชาชนใหม่'} onClose={() => setShowCitizenForm(false)}>
+          <form onSubmit={handleCitizenSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Roblox Username <span className="text-red-400">*</span></label>
+              <input className="input-field" placeholder="ระบุ Roblox Username" value={citizenForm.roblox_username} onChange={(e) => setCitizenForm({ ...citizenForm, roblox_username: e.target.value })} autoFocus />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Discord Username</label>
+              <input className="input-field" placeholder="ระบุ Discord Username (ถ้ามี)" value={citizenForm.discord_username} onChange={(e) => setCitizenForm({ ...citizenForm, discord_username: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">สถานะบุคคล</label>
+              <div className="flex gap-2">
+                {(['normal', 'watched', 'suspended'] as CitizenStatus[]).map((s) => (
+                  <button key={s} type="button" onClick={() => setCitizenForm({ ...citizenForm, status: s })}
+                    className={'flex-1 py-2 rounded-lg text-sm font-medium transition-all ' + (citizenForm.status === s ? 'bg-amber-500 text-navy-900' : 'bg-navy-700 text-gray-400 hover:text-white')}>
+                    {CITIZEN_STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">หมายเหตุส่วนตัว</label>
+              <textarea className="input-field resize-none" rows={3} placeholder="บันทึกหมายเหตุเกี่ยวกับบุคคลนี้..." value={citizenForm.notes} onChange={(e) => setCitizenForm({ ...citizenForm, notes: e.target.value })} />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setShowCitizenForm(false)} className="btn-secondary flex-1">ยกเลิก</button>
+              <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2"><Save size={16} /> บันทึก</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Vehicle Form Modal */}
+      {showVehicleForm && (
+        <Modal title={editingVehicle ? 'แก้ไขยานพาหนะ' : 'เพิ่มยานพาหนะ'} onClose={() => setShowVehicleForm(false)} size="lg">
+          <form onSubmit={handleVehicleSubmit} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ทะเบียนรถ <span className="text-red-400">*</span></label>
+                <input className="input-field uppercase" placeholder="กข1234" value={vehicleForm.license_plate} onChange={(e) => setVehicleForm({ ...vehicleForm, license_plate: e.target.value })} autoFocus />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ยี่ห้อ/รุ่น</label>
+                <input className="input-field" placeholder="เช่น Honda Civic" value={vehicleForm.brand_model} onChange={(e) => setVehicleForm({ ...vehicleForm, brand_model: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ประเภทรถ</label>
+                <select className="input-field" value={vehicleForm.vehicle_type} onChange={(e) => setVehicleForm({ ...vehicleForm, vehicle_type: e.target.value as VehicleType })}>
+                  {Object.entries(VEHICLE_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">หมวดหมู่รถ</label>
+                <select className="input-field" value={vehicleForm.vehicle_category} onChange={(e) => setVehicleForm({ ...vehicleForm, vehicle_category: e.target.value })}>
+                  {Object.entries(VEHICLE_CATEGORY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">สี</label>
+                <input className="input-field" placeholder="สีรถ" value={vehicleForm.color} onChange={(e) => setVehicleForm({ ...vehicleForm, color: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ชื่อเจ้าของ</label>
+                <input className="input-field" placeholder="ชื่อเจ้าของ" value={vehicleForm.owner_name} onChange={(e) => setVehicleForm({ ...vehicleForm, owner_name: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-blue-900/30">
+              <label className="flex items-center gap-2 cursor-pointer mb-3">
+                <input type="checkbox" checked={vehicleForm.is_impounded} onChange={(e) => setVehicleForm({ ...vehicleForm, is_impounded: e.target.checked })} className="w-4 h-4 rounded accent-amber-500" />
+                <span className="text-sm text-white">ยานพาหนะถูกยึด</span>
+              </label>
+              {vehicleForm.is_impounded && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1.5">เหตุผลที่ยึด</label>
+                    <input className="input-field" placeholder="เช่น ไม่ต่อทะเบียน, ฝ่าฝืนจราจร" value={vehicleForm.impound_reason} onChange={(e) => setVehicleForm({ ...vehicleForm, impound_reason: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1.5">สถานที่เก็บ</label>
+                    <input className="input-field" placeholder="เช่น สายตรวจกรมขนส่ง" value={vehicleForm.impound_location} onChange={(e) => setVehicleForm({ ...vehicleForm, impound_location: e.target.value })} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">หมายเหตุ</label>
+              <textarea className="input-field resize-none" rows={2} placeholder="หมายเหตุเพิ่มเติม..." value={vehicleForm.notes} onChange={(e) => setVehicleForm({ ...vehicleForm, notes: e.target.value })} />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setShowVehicleForm(false)} className="btn-secondary flex-1">ยกเลิก</button>
+              <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2"><Save size={16} /> บันทึก</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* License Form Modal */}
+      {showLicenseForm && (
+        <Modal title={editingLicense ? 'แก้ไขใบอนุญาต' : 'เพิ่มใบอนุญาต'} onClose={() => setShowLicenseForm(false)}>
+          <form onSubmit={handleLicenseSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">ประเภทใบอนุญาต</label>
+              <select className="input-field" value={licenseForm.license_type} onChange={(e) => setLicenseForm({ ...licenseForm, license_type: e.target.value })}>
+                <option value="driver">ใบขับขี่</option>
+                <option value="commercial">ใบขับขี่พาณิชย์</option>
+                <option value="motorcycle">ใบขับขี่รถจักรยานยนต์</option>
+                <option value="transport">ใบอนุญาตขนส่ง</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">เลขที่ใบอนุญาต</label>
+              <input className="input-field" placeholder="เลขที่ใบอนุญาต" value={licenseForm.license_number} onChange={(e) => setLicenseForm({ ...licenseForm, license_number: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">วันออกใบอนุญาต</label>
+                <input type="date" className="input-field" value={licenseForm.issue_date} onChange={(e) => setLicenseForm({ ...licenseForm, issue_date: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">วันหมดอายุ</label>
+                <input type="date" className="input-field" value={licenseForm.expiry_date} onChange={(e) => setLicenseForm({ ...licenseForm, expiry_date: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">สถานะใบอนุญาต</label>
+              <select className="input-field" value={licenseForm.status} onChange={(e) => setLicenseForm({ ...licenseForm, status: e.target.value })}>
+                <option value="active">ใช้งานได้</option>
+                <option value="expired">หมดอายุ</option>
+                <option value="suspended">ถูกพักใช้</option>
+                <option value="revoked">ถูกยกเลิก</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">หมายเหตุ</label>
+              <textarea className="input-field resize-none" rows={2} placeholder="หมายเหตุ..." value={licenseForm.notes} onChange={(e) => setLicenseForm({ ...licenseForm, notes: e.target.value })} />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setShowLicenseForm(false)} className="btn-secondary flex-1">ยกเลิก</button>
+              <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2"><Save size={16} /> บันทึก</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Delete Confirmation */}
+      {confirmDelete && (
+        <ConfirmDialog
+          title={'ลบ' + (confirmDelete.type === 'citizen' ? 'ประชาชน' : confirmDelete.type === 'vehicle' ? 'ยานพาหนะ' : 'ใบอนุญาต')}
+          message={'ต้องการลบ' + (confirmDelete.type === 'citizen' ? 'ประชาชน' : confirmDelete.type === 'vehicle' ? 'ยานพาหนะ' : 'ใบอนุญาต') + ' "' + confirmDelete.name + '" ใช่หรือไม่? ไม่สามารถย้อนกลับได้'}
+          confirmLabel="ลบ"
+          onConfirm={async () => {
+            if (confirmDelete.type === 'citizen') await deleteCitizen(confirmDelete.id);
+            else if (confirmDelete.type === 'vehicle') await deleteVehicle(confirmDelete.id);
+            else await deleteLicense(confirmDelete.id);
+            setConfirmDelete(null);
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function CitizenStatusBadge({ status }: { status: CitizenStatus }) {
+  if (status === 'normal') return <Badge variant="success">ปกติ</Badge>;
+  if (status === 'watched') return <Badge variant="warning">เฝ้าระวัง</Badge>;
+  return <Badge variant="danger">ระงับสิทธิ์</Badge>;
+}
+
+function LicenseStatusBadge({ status }: { status: string }) {
+  if (status === 'active') return <Badge variant="success">ใช้งานได้</Badge>;
+  if (status === 'expired') return <Badge variant="danger">หมดอายุ</Badge>;
+  if (status === 'suspended') return <Badge variant="warning">ถูกพักใช้</Badge>;
+  if (status === 'revoked') return <Badge variant="danger">ถูกยกเลิก</Badge>;
+  return <Badge variant="neutral">{status}</Badge>;
+}
+
+function DetailItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1"><span className="text-amber-400">{icon}</span>{label}</div>
+      <div className="text-white text-sm">{value}</div>
+    </div>
+  );
+}

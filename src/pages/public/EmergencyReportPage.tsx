@@ -7,12 +7,6 @@ import { supabase } from '../../lib/supabase';
 import { uploadImage } from '../../lib/storage';
 import { EmergencyReportType, EMERGENCY_TYPE_LABELS } from '../../lib/types';
 
-type Page = 'home' | 'citizen' | 'login' | 'complaint' | 'rates' | 'emergency';
-
-interface Props {
-  onNavigate: (page: Page) => void;
-}
-
 const REPORT_TYPES: { type: EmergencyReportType; icon: React.ReactNode; desc: string }[] = [
   { type: 'accident', icon: <AlertTriangle size={22} />, desc: 'อุบัติเหตุ ชนกัน พลิกคว่ำ' },
   { type: 'breakdown', icon: <CarFront size={22} />, desc: 'รถเสีย เครื่องดับ ยางแตก' },
@@ -20,7 +14,7 @@ const REPORT_TYPES: { type: EmergencyReportType; icon: React.ReactNode; desc: st
   { type: 'other', icon: <Wrench size={22} />, desc: 'เหตุอื่นๆ ที่ต้องการความช่วยเหลือ' },
 ];
 
-export function EmergencyReportPage({ onNavigate }: Props) {
+export function EmergencyReportPage() {
   const [form, setForm] = useState({
     discord_username: '',
     report_type: 'accident' as EmergencyReportType,
@@ -75,7 +69,7 @@ export function EmergencyReportPage({ onNavigate }: Props) {
             ระบบได้ส่งข้อมูลไปยังเจ้าหน้าที่ DOT เรียบร้อยแล้ว เจ้าหน้าที่จะดำเนินการให้โดยเร็วที่สุด
           </p>
           <div className="flex gap-3 justify-center">
-            <button onClick={() => onNavigate('home')} className="btn-secondary">กลับหน้าแรก</button>
+            <button onClick={() => window.history.back()} className="btn-secondary">กลับ</button>
             <button
               onClick={() => {
                 setSubmitted(false);
@@ -201,7 +195,7 @@ export function EmergencyReportPage({ onNavigate }: Props) {
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button type="button" onClick={() => onNavigate('home')} className="btn-secondary flex-1">ยกเลิก</button>
+          <button type="button" onClick={() => window.history.back()} className="btn-secondary flex-1">ยกเลิก</button>
           <button
             type="submit"
             disabled={submitting}

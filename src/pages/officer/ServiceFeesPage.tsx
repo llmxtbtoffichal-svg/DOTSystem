@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, DollarSign, Edit2, Trash2, Image as ImageIcon, Upload, X, Eye } from 'lucide-react';
+import { Plus, Search, DollarSign, Edit2, Trash2, Image as ImageIcon, Upload, X, Eye, Car, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { uploadImage, deleteImage } from '../../lib/storage';
-import { ServiceRecord, ServiceRate } from '../../lib/types';
+import { ServiceRecord, ServiceRate, ServiceType } from '../../lib/types';
 import { useAuth } from '../../lib/AuthContext';
 import { Badge } from '../../components/Badge';
 import { Modal, ConfirmDialog } from '../../components/Modal';
@@ -27,6 +27,7 @@ export function ServiceFeesPage() {
     service_name: '',
     amount: '',
     status: 'unpaid' as 'paid' | 'unpaid',
+    service_type: 'normal' as ServiceType,
     notes: '',
     service_date: new Date().toISOString().slice(0, 16),
     evidence_url: '' as string | null,
@@ -50,7 +51,7 @@ export function ServiceFeesPage() {
   function resetForm() {
     setForm({
       roblox_username: '', discord_username: '', service_rate_id: '',
-      service_name: '', amount: '', status: 'unpaid', notes: '',
+      service_name: '', amount: '', status: 'unpaid', service_type: 'normal', notes: '',
       service_date: new Date().toISOString().slice(0, 16),
       evidence_url: null,
     });
@@ -91,6 +92,7 @@ export function ServiceFeesPage() {
       service_name: form.service_name,
       amount: parseFloat(form.amount) || 0,
       status: form.status,
+      service_type: form.service_type,
       officer_id: officer.id,
       officer_name: officer.name,
       notes: form.notes,
@@ -120,6 +122,7 @@ export function ServiceFeesPage() {
       service_name: rec.service_name,
       amount: rec.amount.toString(),
       status: rec.status,
+      service_type: rec.service_type,
       notes: rec.notes,
       service_date: new Date(rec.service_date).toISOString().slice(0, 16),
       evidence_url: rec.evidence_url ?? null,
@@ -162,7 +165,7 @@ export function ServiceFeesPage() {
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('th-TH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const formatMoney = (n: number) => n.toLocaleString('th-TH') + ' ฿';
+  const formatMoney = (n: number) => n.toLocaleString('th-TH') + ' BC';
 
   return (
     <div>
@@ -210,6 +213,7 @@ export function ServiceFeesPage() {
                   <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">วันที่</th>
                   <th className="text-left px-5 py-3 text-xs font-medium text-gray-500 uppercase">เจ้าหน้าที่</th>
                   <th className="text-right px-5 py-3 text-xs font-medium text-gray-500 uppercase">ยอด</th>
+                  <th className="text-center px-5 py-3 text-xs font-medium text-gray-500 uppercase">ประเภท</th>
                   <th className="text-center px-5 py-3 text-xs font-medium text-gray-500 uppercase">สถานะ</th>
                   <th className="text-center px-5 py-3 text-xs font-medium text-gray-500 uppercase">หลักฐาน</th>
                   <th className="px-5 py-3" />
@@ -229,6 +233,11 @@ export function ServiceFeesPage() {
                     <td className="px-5 py-4 text-sm text-gray-400 whitespace-nowrap">{formatDate(rec.service_date)}</td>
                     <td className="px-5 py-4 text-sm text-gray-400">{rec.officer_name}</td>
                     <td className="px-5 py-4 text-right text-sm font-semibold text-white whitespace-nowrap">{formatMoney(rec.amount)}</td>
+                    <td className="px-5 py-4 text-center">
+                      <Badge variant={rec.service_type === 'impound' ? 'danger' : 'info'}>
+                        {rec.service_type === 'impound' ? 'ยึด' : 'ปกติ'}
+                      </Badge>
+                    </td>
                     <td className="px-5 py-4 text-center">
                       <button onClick={() => toggleStatus(rec)}>
                         <Badge variant={rec.status === 'paid' ? 'success' : 'danger'}>
@@ -288,7 +297,7 @@ export function ServiceFeesPage() {
               <label className="block text-xs text-gray-400 mb-1">ประเภทบริการ (เลือกจากรายการ)</label>
               <select className="input-field" value={form.service_rate_id} onChange={(e) => handleRateSelect(e.target.value)}>
                 <option value="">-- เลือกประเภทบริการ --</option>
-                {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.price.toLocaleString()} ฿)</option>)}
+                {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.price.toLocaleString()} BC)</option>)}
               </select>
             </div>
 
@@ -298,8 +307,36 @@ export function ServiceFeesPage() {
                 <input className="input-field" required placeholder="ชื่อบริการ" value={form.service_name} onChange={(e) => setForm({ ...form, service_name: e.target.value })} />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">ราคา (บาท) *</label>
+                <label className="block text-xs text-gray-400 mb-1">ราคา (BC) *</label>
                 <input type="number" className="input-field" required placeholder="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">ประเภทการบริการ</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, service_type: 'normal' })}
+                  className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                    form.service_type === 'normal'
+                      ? 'bg-blue-500/15 border-blue-500/40 text-blue-400'
+                      : 'bg-navy-900 border-blue-900/40 text-gray-500 hover:border-blue-700/50'
+                  }`}
+                >
+                  <Car size={16} /> ปกติ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, service_type: 'impound' })}
+                  className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ${
+                    form.service_type === 'impound'
+                      ? 'bg-red-500/15 border-red-500/40 text-red-400'
+                      : 'bg-navy-900 border-blue-900/40 text-gray-500 hover:border-red-700/50'
+                  }`}
+                >
+                  <Lock size={16} /> ยึด
+                </button>
               </div>
             </div>
 

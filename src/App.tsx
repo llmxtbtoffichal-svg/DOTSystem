@@ -6,8 +6,9 @@ import { Officer } from './lib/types';
 import { PublicLayout, PublicPage } from './components/PublicLayout';
 import { HomePage } from './pages/public/HomePage';
 import { CitizenPage } from './pages/public/CitizenPage';
-import { ComplaintPage } from './pages/public/ComplaintPage';
+import { VehicleCheckPage } from './pages/public/VehicleCheckPage';
 import { ServiceRatesPublicPage } from './pages/public/ServiceRatesPublicPage';
+import { ComplaintPage } from './pages/public/ComplaintPage';
 import { EmergencyReportPage } from './pages/public/EmergencyReportPage';
 
 // Officer
@@ -19,12 +20,13 @@ import { ServiceFeesPage } from './pages/officer/ServiceFeesPage';
 import { AnnouncementsPage } from './pages/officer/AnnouncementsPage';
 import { ServiceRatesPage } from './pages/officer/ServiceRatesPage';
 import { OfficerManagementPage } from './pages/officer/OfficerManagementPage';
+import { CitizenManagementPage } from './pages/officer/CitizenManagementPage';
 import { ComplaintsManagementPage } from './pages/officer/ComplaintsManagementPage';
 import { EmergencyManagementPage } from './pages/officer/EmergencyManagementPage';
+import { VehicleManagementPage } from './pages/officer/VehicleManagementPage';
 
 // Access Denied
 import { ShieldOff } from 'lucide-react';
-
 
 function AccessDenied({ onBack }: { onBack: () => void }) {
   return (
@@ -47,7 +49,7 @@ function OfficerApp() {
 
   if (!officer) return null;
 
-  const commissionerOnlyPages: OfficerPage[] = ['announcements', 'service-rates', 'officer-management', 'complaints'];
+  const commissionerOnlyPages: OfficerPage[] = ['announcements', 'service-rates', 'officer-management', 'citizen-management', 'complaints'];
   const isDenied = commissionerOnlyPages.includes(currentPage) && !isCommissioner;
 
   function handleNavigate(page: OfficerPage) {
@@ -58,12 +60,8 @@ function OfficerApp() {
     setCurrentPage(page);
   }
 
-  function handleLogout() {
-    logout();
-  }
-
   return (
-    <OfficerLayout currentPage={currentPage} onNavigate={handleNavigate} onLogout={handleLogout}>
+    <OfficerLayout currentPage={currentPage} onNavigate={handleNavigate} onLogout={logout}>
       {isDenied ? (
         <AccessDenied onBack={() => setCurrentPage('dashboard')} />
       ) : (
@@ -75,7 +73,9 @@ function OfficerApp() {
           {currentPage === 'announcements' && isCommissioner && <AnnouncementsPage />}
           {currentPage === 'service-rates' && isCommissioner && <ServiceRatesPage />}
           {currentPage === 'officer-management' && isCommissioner && <OfficerManagementPage />}
+          {currentPage === 'citizen-management' && isCommissioner && <CitizenManagementPage />}
           {currentPage === 'emergency' && <EmergencyManagementPage />}
+          {currentPage === 'vehicles' && <VehicleManagementPage />}
         </>
       )}
     </OfficerLayout>
@@ -98,9 +98,10 @@ function PublicApp() {
     <PublicLayout currentPage={route} onNavigate={setRoute}>
       {route === 'home' && <HomePage onNavigate={setRoute} />}
       {route === 'citizen' && <CitizenPage />}
-      {route === 'complaint' && <ComplaintPage />}
+      {route === 'vehicles' && <VehicleCheckPage />}
       {route === 'rates' && <ServiceRatesPublicPage />}
-      {route === 'emergency' && <EmergencyReportPage onNavigate={setRoute} />}
+      {route === 'complaint' && <ComplaintPage />}
+      {route === 'emergency' && <EmergencyReportPage />}
     </PublicLayout>
   );
 }

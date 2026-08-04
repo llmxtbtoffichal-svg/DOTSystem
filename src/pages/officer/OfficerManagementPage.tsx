@@ -1,13 +1,14 @@
 import { useEffect, useState, ReactNode } from 'react';
 import {
   Plus, Edit2, Trash2, Users, Shield, ShieldOff, Key, Search, Upload, X,
+  Tag,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { hashPassword } from '../../lib/crypto';
 import { uploadImage } from '../../lib/storage';
 import {
-  Officer, OfficerRank, Department,
-  RANK_LABELS, DEPARTMENT_LABELS, DEPARTMENTS,
+  Officer, OfficerRank, OfficerRankRecord, Department,
+  RANK_LABELS, DEPARTMENT_LABELS, DEPARTMENTS, COMMISSIONER_RANK,
 } from '../../lib/types';
 import { useAuth } from '../../lib/AuthContext';
 import { Badge } from '../../components/Badge';
@@ -28,6 +29,12 @@ export function OfficerManagementPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // Rank management state
+  const [ranks, setRanks] = useState<OfficerRankRecord[]>([]);
+  const [showRankForm, setShowRankForm] = useState(false);
+  const [rankForm, setRankForm] = useState({ label: '', rank_key: '', sort_order: 0 });
+  const [editingRank, setEditingRank] = useState<OfficerRankRecord | null>(null);
+
   const [form, setForm] = useState({
     username: '',
     password: '',
@@ -36,7 +43,7 @@ export function OfficerManagementPage() {
     department: 'traffic_management' as Department,
   });
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); fetchRanks(); }, []);
 
   async function fetchAll() {
     setLoading(true);
@@ -44,15 +51,74 @@ export function OfficerManagementPage() {
       .from('officers')
       .select('*')
       .neq('status', 'deleted')
-      .order('rank')
       .order('name');
     setOfficers(data ?? []);
     setLoading(false);
   }
 
+  async function fetchRanks() {
+    const { data } = await supabase
+      .from('officer_ranks')
+      .select('*')
+      .order('sort_order');
+    setRanks(data ?? []);
+  }
+
+  async function handleRankSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!rankForm.label.trim()) return;
+    const key = rankForm.rank_key.trim() || rankForm.label.trim().toLowerCase().replace(/\s+/g, '_');
+    if (editingRank) {
+      const { error } = await supabase.from('officer_ranks').update({
+        label: rankForm.label.trim(),
+        rank_key: key,
+        sort_order: rankForm.sort_order,
+        updated_at: new Date().toISOString(),
+      }).eq('id', editingRank.id);
+      if (error) { alert('ไม่สามารถแก้ไขตำแหน่งได้'); return; }
+    } else {
+      const { error } = await supabase.from('officer_ranks').insert({
+        label: rankForm.label.trim(),
+        rank_key: key,
+        sort_order: rankForm.sort_order,
+      });
+      if (error) {
+        alert('ไม่สามารถเพิ่มตำแหน่งได้ อาจมีชื่อซ้ำ');
+        return;
+      }
+    }
+    setShowRankForm(false);
+    setEditingRank(null);
+    setRankForm({ label: '', rank_key: '', sort_order: 0 });
+    await fetchRanks();
+  }
+
+  async function deleteRank(rank: OfficerRankRecord) {
+    if (rank.rank_key === COMMISSIONER_RANK || rank.sort_order === 1) {
+      alert('ไม่สามารถลบตำแหน่งหัวหน้ากรมขนส่งได้');
+      return;
+    }
+    if (!confirm(`ต้องการลบตำแหน่ง "${rank.label}" ใช่หรือไม่?`)) return;
+    await supabase.from('officer_ranks').delete().eq('id', rank.id);
+    await fetchRanks();
+  }
+
+  function openAddRank() {
+    setEditingRank(null);
+    setRankForm({ label: '', rank_key: '', sort_order: ranks.length + 1 });
+    setShowRankForm(true);
+  }
+
+  function openEditRank(rank: OfficerRankRecord) {
+    setEditingRank(rank);
+    setRankForm({ label: rank.label, rank_key: rank.rank_key ?? '', sort_order: rank.sort_order });
+    setShowRankForm(true);
+  }
+
   function openAdd() {
     setEditItem(null);
-    setForm({ username: '', password: '', name: '', rank: 'officer', department: 'traffic_management' });
+    const defaultRank = ranks[0]?.rank_key ?? 'officer';
+    setForm({ username: '', password: '', name: '', rank: defaultRank, department: 'traffic_management' });
     setPhotoPreview(null);
     setPhotoFile(null);
     setShowForm(true);
@@ -158,9 +224,13 @@ export function OfficerManagementPage() {
   });
 
   const rankBadge = (rank: OfficerRank) => {
-    if (rank === 'commissioner') return <Badge variant="warning">{RANK_LABELS[rank]}</Badge>;
-    if (rank === 'inspector') return <Badge variant="info">{RANK_LABELS[rank]}</Badge>;
-    return <Badge variant="neutral">{RANK_LABELS[rank]}</Badge>;
+    const rankRecord = ranks.find(r => r.rank_key === rank || r.label === rank);
+    const label = rankRecord?.label ?? RANK_LABELS[rank] ?? rank;
+    if (rank === COMMISSIONER_RANK || rankRecord?.sort_order === 1) {
+      return <Badge variant="warning">{label}</Badge>;
+    }
+    if (rankRecord?.sort_order === 2) return <Badge variant="info">{label}</Badge>;
+    return <Badge variant="neutral">{label}</Badge>;
   };
 
   const statusBadge = (status: string) => {
@@ -183,10 +253,80 @@ export function OfficerManagementPage() {
           <h1 className="section-title">จัดการเจ้าหน้าที่</h1>
           <p className="section-subtitle">เพิ่ม แก้ไข และจัดการบัญชีเจ้าหน้าที่</p>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2">
-          <Plus size={16} /> เพิ่มเจ้าหน้าที่
-        </button>
+        <div className="flex gap-2">
+          <button onClick={openAddRank} className="btn-secondary flex items-center gap-2">
+            <Tag size={16} /> จัดการตำแหน่ง
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+            <Plus size={16} /> เพิ่มเจ้าหน้าที่
+          </button>
+        </div>
       </div>
+
+      {/* Rank Management Panel */}
+      {showRankForm && (
+        <div className="card p-5 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-white">{editingRank ? 'แก้ไขตำแหน่ง' : 'เพิ่มตำแหน่งใหม่'}</h2>
+            <button onClick={() => { setShowRankForm(false); setEditingRank(null); }} className="text-gray-500 hover:text-white">
+              <X size={16} />
+            </button>
+          </div>
+          <form onSubmit={handleRankSubmit} className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-xs text-gray-400 mb-1">ชื่อตำแหน่ง</label>
+              <input
+                className="input-field"
+                placeholder="เช่น หัวหน้ากองบัญชาการ"
+                value={rankForm.label}
+                onChange={(e) => setRankForm({ ...rankForm, label: e.target.value })}
+                autoFocus
+              />
+            </div>
+            <div className="w-28">
+              <label className="block text-xs text-gray-400 mb-1">ลำดับ (น้อย = สูง)</label>
+              <input
+                type="number"
+                className="input-field"
+                value={rankForm.sort_order}
+                onChange={(e) => setRankForm({ ...rankForm, sort_order: parseInt(e.target.value) || 0 })}
+              />
+            </div>
+            <div className="w-40">
+              <label className="block text-xs text-gray-400 mb-1">รหัสตำแหน่ง (อังกฤษ)</label>
+              <input
+                className="input-field"
+                placeholder="เช่น officer, inspector"
+                value={rankForm.rank_key}
+                onChange={(e) => setRankForm({ ...rankForm, rank_key: e.target.value })}
+              />
+            </div>
+            <button type="submit" className="btn-primary px-5">
+              {editingRank ? 'บันทึก' : 'เพิ่ม'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Existing Ranks List */}
+      {ranks.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          {ranks.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 bg-navy-800 border border-blue-900/40 rounded-lg px-3 py-1.5">
+              <span className="text-xs text-gray-500">#{r.sort_order}</span>
+              <span className="text-sm text-white font-medium">{r.label}</span>
+              <button onClick={() => openEditRank(r)} className="text-blue-400 hover:bg-blue-500/10 p-1 rounded">
+                <Edit2 size={11} />
+              </button>
+              {r.label !== COMMISSIONER_RANK && (
+                <button onClick={() => deleteRank(r)} className="text-red-400 hover:bg-red-500/10 p-1 rounded">
+                  <Trash2 size={11} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-6 max-w-sm">
@@ -315,9 +455,13 @@ export function OfficerManagementPage() {
             <div>
               <label className="block text-xs text-gray-400 mb-1">ตำแหน่ง</label>
               <select className="input-field" value={form.rank} onChange={(e) => setForm({ ...form, rank: e.target.value as OfficerRank })}>
-                {(Object.entries(RANK_LABELS) as [OfficerRank, string][]).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
+                {ranks.length > 0 ? (
+                  ranks.map((r) => <option key={r.id} value={r.rank_key ?? r.label}>{r.label}</option>)
+                ) : (
+                  (Object.entries(RANK_LABELS) as [string, string][]).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))
+                )}
               </select>
             </div>
             <div>

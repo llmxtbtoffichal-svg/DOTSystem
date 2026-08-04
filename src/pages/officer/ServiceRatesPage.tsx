@@ -128,7 +128,7 @@ export function ServiceRatesPage() {
                         <td className="px-5 py-4 text-white text-sm font-medium">{rate.name}</td>
                         <td className="px-5 py-4 text-gray-400 text-sm">{rate.description || '-'}</td>
                         <td className="px-5 py-4 text-right text-white font-semibold text-sm">
-                          {rate.price.toLocaleString('th-TH')} ฿
+                          {rate.price.toLocaleString('th-TH')} BC
                         </td>
                         <td className="px-5 py-4 text-center">
                           <button onClick={() => toggleActive(rate)} className="flex items-center gap-1.5 mx-auto">
@@ -172,7 +172,7 @@ export function ServiceRatesPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">ราคา (บาท) *</label>
+              <label className="block text-xs text-gray-400 mb-1">ราคา (BC) *</label>
               <input required type="number" min="0" className="input-field" placeholder="0" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} />
             </div>
             <div>
@@ -197,7 +197,7 @@ export function ServiceRatesPage() {
       {deleteItem && (
         <ConfirmDialog
           title="ลบอัตราค่าบริการ"
-          message={`ต้องการลบ "${deleteItem.name}" ราคา ${deleteItem.price.toLocaleString()} บาท ใช่หรือไม่?`}
+          message={`ต้องการลบ "${deleteItem.name}" ราคา ${deleteItem.price.toLocaleString()} BC ใช่หรือไม่?`}
           confirmLabel="ลบ"
           danger
           onConfirm={handleDelete}

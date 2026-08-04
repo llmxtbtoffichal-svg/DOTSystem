@@ -104,7 +104,7 @@ export function ServiceRatesPublicPage() {
                       <div className="text-amber-400 font-bold text-lg">
                         {rate.price.toLocaleString('th-TH')}
                       </div>
-                      <div className="text-gray-500 text-xs">บาท</div>
+                      <div className="text-gray-500 text-xs">BC</div>
                     </div>
                   </div>
                 ))}

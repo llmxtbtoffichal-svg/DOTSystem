@@ -11,7 +11,7 @@ function generateFileName(prefix: string, file: File): string {
 
 export async function uploadImage(
   file: File,
-  folder: 'announcements' | 'officers' | 'evidence'
+  folder: 'announcements' | 'officers' | 'evidence' | 'vehicles'
 ): Promise<string | null> {
   const filePath = generateFileName(folder, file);
   const { error } = await supabase.storage

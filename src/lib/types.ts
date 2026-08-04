@@ -1,6 +1,17 @@
-export type OfficerRank = 'commissioner' | 'inspector' | 'officer';
+export type OfficerRank = string;
 export type OfficerStatus = 'active' | 'suspended' | 'deleted';
+
+export interface OfficerRankRecord {
+  id: string;
+  label: string;
+  rank_key: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 export type ServiceStatus = 'paid' | 'unpaid';
+export type ServiceType = 'normal' | 'impound';
 
 export type Department =
   | 'civil_maintenance'
@@ -54,6 +65,7 @@ export interface ServiceRecord {
   service_name: string;
   amount: number;
   status: ServiceStatus;
+  service_type: ServiceType;
   officer_id: string | null;
   officer_name: string;
   notes: string;
@@ -94,9 +106,42 @@ export interface AuditLog {
 export interface SystemSettings {
   id: number;
   duty_system_enabled: boolean;
+  login_enabled: boolean;
   updated_at: string;
   updated_by: string | null;
   updated_by_name: string | null;
+}
+
+export interface License {
+  id: string;
+  roblox_username: string;
+  discord_username: string | null;
+  license_type: string;
+  license_number: string | null;
+  issue_date: string;
+  expiry_date: string | null;
+  status: string;
+  issued_by: string | null;
+  issued_by_name: string | null;
+  notes: string | null;
+  citizen_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Complaint {
+  id: string;
+  complainant_name: string | null;
+  complainant_contact: string | null;
+  officer_name: string | null;
+  category: string | null;
+  description: string | null;
+  discord_username: string | null;
+  incident_datetime: string | null;
+  details: string | null;
+  evidence_url: string | null;
+  status: string;
+  created_at: string;
 }
 
 export type EmergencyReportType = 'accident' | 'breakdown' | 'towing' | 'other';
@@ -130,7 +175,68 @@ export const EMERGENCY_STATUS_LABELS: Record<EmergencyReportStatus, string> = {
   dismissed: 'ยกเลิก',
 };
 
-export const RANK_LABELS: Record<OfficerRank, string> = {
+export type VehicleType = 'sedan' | 'suv' | 'pickup' | 'motorcycle' | 'truck' | 'van' | 'other';
+
+export interface Vehicle {
+  id: string;
+  license_plate: string;
+  owner_name: string | null;
+  vehicle_type: VehicleType;
+  color: string | null;
+  brand_model: string | null;
+  vehicle_category: string | null;
+  citizen_id: string | null;
+  is_impounded: boolean;
+  impound_reason: string | null;
+  impound_location: string | null;
+  impounded_at: string | null;
+  impounded_by: string | null;
+  impounded_by_name: string | null;
+  released_at: string | null;
+  released_by: string | null;
+  released_by_name: string | null;
+  notes: string | null;
+  image_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CitizenStatus = 'normal' | 'watched' | 'suspended';
+
+export interface Citizen {
+  id: string;
+  roblox_username: string;
+  discord_username: string | null;
+  status: CitizenStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const CITIZEN_STATUS_LABELS: Record<CitizenStatus, string> = {
+  normal: 'ปกติ',
+  watched: 'เฝ้าระวัง',
+  suspended: 'ระงับสิทธิ์',
+};
+
+export const VEHICLE_CATEGORY_LABELS: Record<string, string> = {
+  personal: 'รถส่วนตัว',
+  public: 'รถสาธารณะ',
+  transport: 'รถขนส่ง',
+};
+
+export const VEHICLE_TYPE_LABELS: Record<VehicleType, string> = {
+  sedan: 'รถเก๋ง',
+  suv: 'รถ SUV',
+  pickup: 'รถกระบะ',
+  motorcycle: 'รถจักรยานยนต์',
+  truck: 'รถบรรทุก',
+  van: 'รถตู้',
+  other: 'อื่นๆ',
+};
+
+// Legacy fallback labels — used only before ranks are loaded from DB
+export const RANK_LABELS: Record<string, string> = {
   commissioner: 'หัวหน้ากรมขนส่ง',
   inspector: 'ผู้คุมสอบกรมขนส่ง',
   officer: 'พนักงาน',
@@ -151,3 +257,6 @@ export const DEPARTMENTS: Department[] = [
   'traffic_management',
   'emergency_assistance',
 ];
+
+// The commissioner rank identifier — always stored as this string in officers.rank
+export const COMMISSIONER_RANK = 'commissioner';

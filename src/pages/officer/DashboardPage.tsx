@@ -1,7 +1,7 @@
 import { useEffect, useState, ReactNode } from 'react';
 import {
   Users, DollarSign, FileText, TrendingUp, Clock, AlertCircle, Pin,
-  Phone, Power, Image as ImageIcon,
+  Phone, Power, Image as ImageIcon, Lock, Unlock,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Announcement, Officer, ServiceRecord, DEPARTMENT_LABELS } from '../../lib/types';
@@ -22,9 +22,11 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [forceTarget, setForceTarget] = useState<Officer | null>(null);
   const [idCardOfficer, setIdCardOfficer] = useState<{ officer: Officer; clockIn: string | null } | null>(null);
+  const [loginEnabled, setLoginEnabled] = useState(true);
+  const [togglingLogin, setTogglingLogin] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchStats(), fetchAnnouncements(), fetchOnDuty(), fetchRecentServices()]).finally(() => setLoading(false));
+    Promise.all([fetchStats(), fetchAnnouncements(), fetchOnDuty(), fetchRecentServices(), fetchLoginStatus()]).finally(() => setLoading(false));
   }, []);
 
   async function fetchStats() {
@@ -69,6 +71,37 @@ export function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(5);
     setRecentServices(data ?? []);
+  }
+
+  async function fetchLoginStatus() {
+    const { data } = await supabase
+      .from('system_settings')
+      .select('login_enabled')
+      .eq('id', 1)
+      .maybeSingle();
+    if (data) setLoginEnabled(data.login_enabled);
+  }
+
+  async function toggleLogin() {
+    if (!officer) return;
+    setTogglingLogin(true);
+    const newVal = !loginEnabled;
+    await supabase.from('system_settings').update({
+      login_enabled: newVal,
+      updated_at: new Date().toISOString(),
+      updated_by: officer.id,
+      updated_by_name: officer.name,
+    }).eq('id', 1);
+    await supabase.from('audit_logs').insert({
+      action: newVal ? 'ENABLE_LOGIN' : 'DISABLE_LOGIN',
+      target_type: 'system',
+      target_id: 'system_settings',
+      performed_by: officer.id,
+      performed_by_name: officer.name,
+      details: { login_enabled: newVal },
+    });
+    setLoginEnabled(newVal);
+    setTogglingLogin(false);
   }
 
   async function showIdCard(o: Officer) {
@@ -125,7 +158,7 @@ export function DashboardPage() {
     return 'สวัสดีตอนเย็น';
   };
 
-  const formatMoney = (n: number) => n.toLocaleString('th-TH') + ' บาท';
+  const formatMoney = (n: number) => n.toLocaleString('th-TH') + ' BC';
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('th-TH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const formatServiceDate = (iso: string) =>
@@ -287,6 +320,33 @@ export function DashboardPage() {
               <div className="pt-3 border-t border-blue-900/40 text-xs text-gray-500">
                 ไปที่เมนู "ปฏิบัติการ" เพื่อลงชื่อเข้า-ออกเวร
               </div>
+              {isCommissioner && (
+                <div className="pt-3 border-t border-blue-900/40">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-gray-400 text-sm flex items-center gap-1.5">
+                      {loginEnabled ? <Unlock size={14} className="text-emerald-400" /> : <Lock size={14} className="text-red-400" />}
+                      ระบบเข้าสู่ระบบเจ้าหน้าที่
+                    </span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      loginEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {loginEnabled ? 'เปิดอยู่' : 'ปิดอยู่'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={toggleLogin}
+                    disabled={togglingLogin}
+                    className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+                      loginEnabled
+                        ? 'bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25'
+                        : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25'
+                    }`}
+                  >
+                    {togglingLogin ? 'กำลังบันทึก...' : loginEnabled ? 'ปิดระบบเข้าสู่ระบบ' : 'เปิดระบบเข้าสู่ระบบ'}
+                  </button>
+                  <p className="text-[10px] text-gray-600 mt-1.5">หัวหน้าสามารถปิด/เปิด ระบบล็อกอินได้</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -307,7 +367,7 @@ export function DashboardPage() {
                       <div className="text-gray-500 text-[10px]">{rec.officer_name} • {formatServiceDate(rec.service_date)}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-white text-xs font-semibold">{rec.amount.toLocaleString('th-TH')}฿</div>
+                      <div className="text-white text-xs font-semibold">{rec.amount.toLocaleString('th-TH')} BC</div>
                       <Badge variant={rec.status === 'paid' ? 'success' : 'danger'}>
                         {rec.status === 'paid' ? 'ชำระ' : 'ค้าง'}
                       </Badge>

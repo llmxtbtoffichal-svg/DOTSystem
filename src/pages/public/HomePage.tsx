@@ -1,15 +1,15 @@
 import { useEffect, useState, ReactNode } from 'react';
 import {
-  Truck, LogIn, FileText, DollarSign, ChevronRight,
-  Pin, AlertCircle, MessageSquare, Siren, Clock, User,
+  Truck, LogIn, FileText, ChevronRight,
+  Pin, AlertCircle, MessageSquare, Clock, User, Car,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Announcement, Officer, RANK_LABELS, DEPARTMENT_LABELS } from '../../lib/types';
 
-type Page = 'home' | 'citizen' | 'login' | 'complaint' | 'rates' | 'emergency';
+import type { PublicPage } from '../../components/PublicLayout';
 
 interface Props {
-  onNavigate: (page: Page) => void;
+  onNavigate: (page: PublicPage) => void;
 }
 
 export function HomePage({ onNavigate }: Props) {
@@ -92,12 +92,11 @@ export function HomePage({ onNavigate }: Props) {
             ระบบบริหารจัดการและให้บริการกรมขนส่ง Bit Cities
           </p>
 
-          {/* Quick Action Buttons — 4 items */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto">
+          {/* Quick Action Buttons — 3 items */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
             <QuickBtn icon={<LogIn size={20} />} label="เข้าสู่ระบบเจ้าหน้าที่" color="amber" onClick={() => onNavigate('login')} />
-            <QuickBtn icon={<Siren size={20} />} label="แจ้งเหตุฉุกเฉิน" color="red" onClick={() => onNavigate('emergency')} />
-            <QuickBtn icon={<DollarSign size={20} />} label="อัตราค่าบริการ" color="teal" onClick={() => onNavigate('rates')} />
-            <QuickBtn icon={<MessageSquare size={20} />} label="ร้องเรียนเจ้าหน้าที่" color="blue" onClick={() => onNavigate('complaint')} />
+            <QuickBtn icon={<User size={20} />} label="ระบบประชาชน" color="blue" onClick={() => onNavigate('citizen')} />
+            <QuickBtn icon={<Car size={20} />} label="ตรวจสอบยานพาหนะ" color="emerald" onClick={() => onNavigate('vehicles')} />
           </div>
         </div>
       </section>
@@ -271,6 +270,7 @@ function QuickBtn({ icon, label, color, onClick }: { icon: ReactNode; label: str
     teal: 'bg-teal-600 hover:bg-teal-500 text-white',
     red: 'bg-red-600 hover:bg-red-500 text-white',
     blue: 'bg-blue-600 hover:bg-blue-500 text-white',
+    emerald: 'bg-emerald-600 hover:bg-emerald-500 text-white',
   };
   return (
     <button
