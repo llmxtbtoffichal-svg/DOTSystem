@@ -2,11 +2,11 @@ import { ReactNode, useEffect, useState } from 'react';
 import {
   Search, UserCog, Plus, Edit2, Trash2, Car, CreditCard, X,
   AlertCircle, CheckCircle2, Lock, User, FileText, Clock, MapPin,
-  Bike, Truck as TowTruck, CarFront, Shield, Save,
+  Bike, Truck as TowTruck, CarFront, Shield, Save, DollarSign, Eye,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
-  Citizen, CitizenStatus, Vehicle, License,
+  Citizen, CitizenStatus, Vehicle, License, ServiceRecord, ServiceRate, ServiceType,
   VEHICLE_TYPE_LABELS, VEHICLE_CATEGORY_LABELS, CITIZEN_STATUS_LABELS,
   VehicleType,
 } from '../../lib/types';
@@ -14,10 +14,10 @@ import { useAuth } from '../../lib/AuthContext';
 import { Badge } from '../../components/Badge';
 import { Modal, ConfirmDialog } from '../../components/Modal';
 
-type Tab = 'overview' | 'vehicles' | 'licenses';
+type Tab = 'overview' | 'vehicles' | 'licenses' | 'fees';
 
 export function CitizenManagementPage() {
-  const { officer } = useAuth();
+  const { officer, isCommissioner } = useAuth();
   const [tab, setTab] = useState<Tab>('overview');
   const [searchQ, setSearchQ] = useState('');
   const [searched, setSearched] = useState(false);
@@ -27,6 +27,8 @@ export function CitizenManagementPage() {
   const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [licenses, setLicenses] = useState<License[]>([]);
+  const [feeRecords, setFeeRecords] = useState<ServiceRecord[]>([]);
+  const [rates, setRates] = useState<ServiceRate[]>([]);
 
   const [showCitizenForm, setShowCitizenForm] = useState(false);
   const [editingCitizen, setEditingCitizen] = useState<Citizen | null>(null);
@@ -47,7 +49,15 @@ export function CitizenManagementPage() {
     status: 'active', notes: '',
   });
 
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'citizen' | 'vehicle' | 'license'; id: string; name: string } | null>(null);
+  const [showFeeForm, setShowFeeForm] = useState(false);
+  const [editingFee, setEditingFee] = useState<ServiceRecord | null>(null);
+  const [feeForm, setFeeForm] = useState({
+    service_rate_id: '', service_name: '', amount: '',
+    status: 'unpaid' as 'paid' | 'unpaid', service_type: 'normal' as ServiceType,
+    notes: '', service_date: new Date().toISOString().slice(0, 16),
+  });
+
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'citizen' | 'vehicle' | 'license' | 'fee'; id: string; name: string } | null>(null);
 
   useEffect(() => { fetchCitizens(); }, []);
 
@@ -76,7 +86,7 @@ export function CitizenManagementPage() {
   async function selectCitizen(c: Citizen) {
     setSelectedCitizen(c);
     setTab('overview');
-    await Promise.all([fetchVehicles(c.id), fetchLicenses(c.id)]);
+    await Promise.all([fetchVehicles(c.id), fetchLicenses(c.id), fetchFees(c.id), fetchRates()]);
   }
 
   async function fetchVehicles(citizenId: string) {
@@ -87,6 +97,16 @@ export function CitizenManagementPage() {
   async function fetchLicenses(citizenId: string) {
     const { data } = await supabase.from('licenses').select('*').eq('citizen_id', citizenId).order('created_at', { ascending: false });
     setLicenses(data ?? []);
+  }
+
+  async function fetchFees(citizenId: string) {
+    const { data } = await supabase.from('service_records').select('*').eq('citizen_id', citizenId).order('service_date', { ascending: false });
+    setFeeRecords(data ?? []);
+  }
+
+  async function fetchRates() {
+    const { data } = await supabase.from('service_rates').select('*').eq('is_active', true).order('name');
+    setRates(data ?? []);
   }
 
   /* ===== Citizen CRUD ===== */
@@ -254,6 +274,81 @@ export function CitizenManagementPage() {
     await fetchLicenses(selectedCitizen.id);
   }
 
+  /* ===== Fee CRUD ===== */
+  function openAddFee() {
+    if (!selectedCitizen) return;
+    setEditingFee(null);
+    setFeeForm({
+      service_rate_id: '', service_name: '', amount: '',
+      status: 'unpaid', service_type: 'normal',
+      notes: '', service_date: new Date().toISOString().slice(0, 16),
+    });
+    setShowFeeForm(true);
+  }
+
+  function openEditFee(f: ServiceRecord) {
+    setEditingFee(f);
+    setFeeForm({
+      service_rate_id: f.service_rate_id ?? '',
+      service_name: f.service_name, amount: f.amount.toString(),
+      status: f.status, service_type: f.service_type,
+      notes: f.notes, service_date: new Date(f.service_date).toISOString().slice(0, 16),
+    });
+    setShowFeeForm(true);
+  }
+
+  function handleRateSelect(rateId: string) {
+    const rate = rates.find((r) => r.id === rateId);
+    setFeeForm((f) => ({
+      ...f,
+      service_rate_id: rateId,
+      service_name: rate?.name ?? f.service_name,
+      amount: rate ? rate.price.toString() : f.amount,
+    }));
+  }
+
+  async function handleFeeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedCitizen || !feeForm.service_name.trim()) return;
+    const payload = {
+      roblox_username: selectedCitizen.roblox_username,
+      discord_username: selectedCitizen.discord_username || '',
+      citizen_id: selectedCitizen.id,
+      service_rate_id: feeForm.service_rate_id || null,
+      service_name: feeForm.service_name,
+      amount: parseFloat(feeForm.amount) || 0,
+      status: feeForm.status,
+      service_type: feeForm.service_type,
+      officer_id: officer?.id ?? null,
+      officer_name: officer?.name ?? '',
+      notes: feeForm.notes,
+      service_date: new Date(feeForm.service_date).toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (editingFee) {
+      await supabase.from('service_records').update(payload).eq('id', editingFee.id);
+    } else {
+      await supabase.from('service_records').insert(payload);
+    }
+    setShowFeeForm(false);
+    await fetchFees(selectedCitizen.id);
+  }
+
+  async function toggleFeeStatus(f: ServiceRecord) {
+    if (!isCommissioner && officer && f.officer_id !== officer.id) return;
+    const newStatus = f.status === 'paid' ? 'unpaid' : 'paid';
+    await supabase.from('service_records').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', f.id);
+    setFeeRecords((prev) => prev.map((r) => r.id === f.id ? { ...r, status: newStatus } : r));
+  }
+
+  async function deleteFee(id: string) {
+    if (!selectedCitizen) return;
+    await supabase.from('service_records').delete().eq('id', id);
+    await fetchFees(selectedCitizen.id);
+  }
+
+  const [viewFeeImage, setViewFeeImage] = useState<string | null>(null);
+
   const formatDate = (iso: string | null) => {
     if (!iso) return '-';
     return new Date(iso).toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -269,10 +364,13 @@ export function CitizenManagementPage() {
     }
   };
 
+  const formatMoney = (n: number) => Number(n).toLocaleString('th-TH') + ' BC';
+
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'overview', label: 'ข้อมูลรวม', icon: <User size={16} /> },
     { id: 'vehicles', label: 'ยานพาหนะ', icon: <Car size={16} /> },
     { id: 'licenses', label: 'ใบอนุญาต', icon: <CreditCard size={16} /> },
+    { id: 'fees', label: 'ค่าบริการ', icon: <DollarSign size={16} /> },
   ];
 
   return (
@@ -410,6 +508,93 @@ export function CitizenManagementPage() {
                   </div>
                 </div>
               )}
+
+              {/* Fees Tab */}
+              {tab === 'fees' && (() => {
+                const feeTotal = feeRecords.reduce((s, r) => s + Number(r.amount), 0);
+                const feePaid = feeRecords.filter((r) => r.status === 'paid').reduce((s, r) => s + Number(r.amount), 0);
+                const feeUnpaid = feeTotal - feePaid;
+                return (
+                <div>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="card p-4 text-center">
+                      <div className="text-xl font-bold text-white">{formatMoney(feeTotal)}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">ยอดรวมทั้งหมด ({feeRecords.length} รายการ)</div>
+                    </div>
+                    <div className="card p-4 text-center border-emerald-500/20">
+                      <div className="text-xl font-bold text-emerald-400">{formatMoney(feePaid)}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">ชำระแล้ว</div>
+                    </div>
+                    <div className="card p-4 text-center border-red-500/20">
+                      <div className="text-xl font-bold text-red-400">{formatMoney(feeUnpaid)}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">ค้างชำระ</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-gray-400">ประวัติค่าบริการ ({feeRecords.length})</h3>
+                    <button onClick={openAddFee} className="btn-primary px-4 py-1.5 text-sm flex items-center gap-1.5">
+                      <Plus size={14} /> เพิ่มค่าบริการ
+                    </button>
+                  </div>
+                  {feeRecords.length === 0 ? (
+                    <div className="card p-8 text-center">
+                      <DollarSign size={28} className="text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-400 text-sm">ยังไม่มีประวัติค่าบริการ</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {feeRecords.map((f) => {
+                        const canEdit = isCommissioner || (officer && f.officer_id === officer.id);
+                        return (
+                        <div key={f.id} className={'card p-4 ' + (f.service_type === 'impound' ? 'border-red-500/20' : '')}>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={'w-10 h-10 rounded-lg flex items-center justify-center ' + (f.service_type === 'impound' ? 'bg-red-500/10 border border-red-500/30' : 'bg-blue-500/10 border border-blue-500/20')}>
+                                {f.service_type === 'impound' ? <Lock size={18} className="text-red-400" /> : <DollarSign size={18} className="text-blue-400" />}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-white font-semibold">{f.service_name}</span>
+                                  <Badge variant={f.service_type === 'impound' ? 'danger' : 'info'}>{f.service_type === 'impound' ? 'ยึด' : 'ปกติ'}</Badge>
+                                </div>
+                                <div className="text-gray-500 text-xs mt-0.5">
+                                  {formatDate(f.service_date)} · เจ้าหน้าที่: {f.officer_name}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={'text-sm font-bold ' + (f.status === 'paid' ? 'text-emerald-400' : 'text-red-400')}>{formatMoney(Number(f.amount))}</span>
+                              {canEdit ? (
+                                <button onClick={() => toggleFeeStatus(f)} title="สลับสถานะการชำระ">
+                                  <Badge variant={f.status === 'paid' ? 'success' : 'danger'}>{f.status === 'paid' ? 'ชำระแล้ว' : 'ค้างชำระ'}</Badge>
+                                </button>
+                              ) : (
+                                <Badge variant={f.status === 'paid' ? 'success' : 'danger'}>{f.status === 'paid' ? 'ชำระแล้ว' : 'ค้างชำระ'}</Badge>
+                              )}
+                              {f.evidence_url && (
+                                <button onClick={() => setViewFeeImage(f.evidence_url)} className="bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 p-1.5 rounded-lg" title="ดูหลักฐาน"><Eye size={14} /></button>
+                              )}
+                              {canEdit ? (
+                                <button onClick={() => openEditFee(f)} className="bg-navy-700 text-gray-400 hover:text-white p-1.5 rounded-lg" title="แก้ไข"><Edit2 size={14} /></button>
+                              ) : (
+                                <span className="text-gray-600 text-xs px-1" title="ไม่สามารถแก้ไขได้ เฉพาะผู้ที่สร้างรายการนี้เท่านั้น">—</span>
+                              )}
+                              {canEdit && isCommissioner && (
+                                <button onClick={() => setConfirmDelete({ type: 'fee', id: f.id, name: f.service_name })} className="bg-red-500/10 text-red-400 hover:bg-red-500/20 p-1.5 rounded-lg" title="ลบ"><Trash2 size={14} /></button>
+                              )}
+                            </div>
+                          </div>
+                          {f.notes && <div className="mt-2 pt-2 border-t border-blue-900/30 text-xs text-gray-500">{f.notes}</div>}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                );
+              })()}
 
               {/* Vehicles Tab */}
               {tab === 'vehicles' && (
@@ -665,16 +850,83 @@ export function CitizenManagementPage() {
         </Modal>
       )}
 
+      {/* Fee Form Modal */}
+      {showFeeForm && (
+        <Modal title={editingFee ? 'แก้ไขค่าบริการ' : 'เพิ่มค่าบริการ'} onClose={() => setShowFeeForm(false)} size="lg">
+          <form onSubmit={handleFeeSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">ประเภทบริการ (เลือกจากรายการ)</label>
+              <select className="input-field" value={feeForm.service_rate_id} onChange={(e) => handleRateSelect(e.target.value)}>
+                <option value="">-- เลือกประเภทบริการ --</option>
+                {rates.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.price.toLocaleString()} BC)</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ชื่อบริการ <span className="text-red-400">*</span></label>
+                <input className="input-field" required placeholder="ชื่อบริการ" value={feeForm.service_name} onChange={(e) => setFeeForm({ ...feeForm, service_name: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ราคา (BC) <span className="text-red-400">*</span></label>
+                <input type="number" className="input-field" required placeholder="0" value={feeForm.amount} onChange={(e) => setFeeForm({ ...feeForm, amount: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">ประเภทการบริการ</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setFeeForm({ ...feeForm, service_type: 'normal' })} className={'flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ' + (feeForm.service_type === 'normal' ? 'bg-blue-500/15 border-blue-500/40 text-blue-400' : 'bg-navy-900 border-blue-900/40 text-gray-500 hover:border-blue-700/50')}>
+                  <Car size={16} /> ปกติ
+                </button>
+                <button type="button" onClick={() => setFeeForm({ ...feeForm, service_type: 'impound' })} className={'flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border-2 text-sm font-medium transition-all ' + (feeForm.service_type === 'impound' ? 'bg-red-500/15 border-red-500/40 text-red-400' : 'bg-navy-900 border-blue-900/40 text-gray-500 hover:border-red-700/50')}>
+                  <Lock size={16} /> ยึด
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">วันที่ให้บริการ</label>
+                <input type="datetime-local" className="input-field" value={feeForm.service_date} onChange={(e) => setFeeForm({ ...feeForm, service_date: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">สถานะ</label>
+                <select className="input-field" value={feeForm.status} onChange={(e) => setFeeForm({ ...feeForm, status: e.target.value as 'paid' | 'unpaid' })}>
+                  <option value="unpaid">ค้างชำระ</option>
+                  <option value="paid">ชำระแล้ว</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">หมายเหตุ</label>
+              <textarea className="input-field resize-none" rows={2} placeholder="หมายเหตุ..." value={feeForm.notes} onChange={(e) => setFeeForm({ ...feeForm, notes: e.target.value })} />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setShowFeeForm(false)} className="btn-secondary flex-1">ยกเลิก</button>
+              <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2"><Save size={16} /> บันทึก</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Fee Evidence Image Viewer */}
+      {viewFeeImage && (
+        <Modal title="รูปภาพหลักฐาน" onClose={() => setViewFeeImage(null)} size="lg">
+          <div className="flex justify-center">
+            <img src={viewFeeImage} alt="evidence" className="max-w-full max-h-[60vh] rounded-lg object-contain" />
+          </div>
+        </Modal>
+      )}
+
       {/* Delete Confirmation */}
       {confirmDelete && (
         <ConfirmDialog
-          title={'ลบ' + (confirmDelete.type === 'citizen' ? 'ประชาชน' : confirmDelete.type === 'vehicle' ? 'ยานพาหนะ' : 'ใบอนุญาต')}
-          message={'ต้องการลบ' + (confirmDelete.type === 'citizen' ? 'ประชาชน' : confirmDelete.type === 'vehicle' ? 'ยานพาหนะ' : 'ใบอนุญาต') + ' "' + confirmDelete.name + '" ใช่หรือไม่? ไม่สามารถย้อนกลับได้'}
+          title={'ลบ' + (confirmDelete.type === 'citizen' ? 'ประชาชน' : confirmDelete.type === 'vehicle' ? 'ยานพาหนะ' : confirmDelete.type === 'license' ? 'ใบอนุญาต' : 'ค่าบริการ')}
+          message={'ต้องการลบ' + (confirmDelete.type === 'citizen' ? 'ประชาชน' : confirmDelete.type === 'vehicle' ? 'ยานพาหนะ' : confirmDelete.type === 'license' ? 'ใบอนุญาต' : 'ค่าบริการ') + ' "' + confirmDelete.name + '" ใช่หรือไม่? ไม่สามารถย้อนกลับได้'}
           confirmLabel="ลบ"
           onConfirm={async () => {
             if (confirmDelete.type === 'citizen') await deleteCitizen(confirmDelete.id);
             else if (confirmDelete.type === 'vehicle') await deleteVehicle(confirmDelete.id);
-            else await deleteLicense(confirmDelete.id);
+            else if (confirmDelete.type === 'license') await deleteLicense(confirmDelete.id);
+            else await deleteFee(confirmDelete.id);
             setConfirmDelete(null);
           }}
           onCancel={() => setConfirmDelete(null)}

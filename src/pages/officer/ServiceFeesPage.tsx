@@ -133,6 +133,7 @@ export function ServiceFeesPage() {
   }
 
   async function toggleStatus(rec: ServiceRecord) {
+    if (!isCommissioner && officer && rec.officer_id !== officer.id) return;
     const newStatus = rec.status === 'paid' ? 'unpaid' : 'paid';
     await supabase.from('service_records').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', rec.id);
     setRecords((prev) => prev.map((r) => r.id === rec.id ? { ...r, status: newStatus } : r));
@@ -260,14 +261,22 @@ export function ServiceFeesPage() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-1 justify-end">
-                        <button onClick={() => openEdit(rec)} className="p-1.5 rounded text-gray-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="แก้ไข">
-                          <Edit2 size={14} />
-                        </button>
-                        {isCommissioner && (
-                          <button onClick={() => setDeleteRecord(rec)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="ลบ">
-                            <Trash2 size={14} />
-                          </button>
-                        )}
+                        {(() => {
+                          const canEdit = isCommissioner || (officer && rec.officer_id === officer.id);
+                          if (!canEdit) return <span className="text-gray-600 text-xs" title="ไม่สามารถแก้ไขได้ เฉพาะผู้ที่สร้างรายการนี้เท่านั้น">—</span>;
+                          return (
+                            <>
+                              <button onClick={() => openEdit(rec)} className="p-1.5 rounded text-gray-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="แก้ไข">
+                                <Edit2 size={14} />
+                              </button>
+                              {isCommissioner && (
+                                <button onClick={() => setDeleteRecord(rec)} className="p-1.5 rounded text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors" title="ลบ">
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

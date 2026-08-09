@@ -180,7 +180,7 @@ export function VehicleManagementPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="section-title">ระบบยานพาหนะ</h1>
-          <p className="section-subtitle">ลงทะเบียน ตรวจสอบ และจัดการการนึดยานพาหนะ</p>
+          <p className="section-subtitle">ลงทะเบียน ตรวจสอบ และจัดการการยึดยานพาหนะ</p>
         </div>
         <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2">
           <Plus size={16} /> เพิ่มยานพาหนะ
@@ -207,7 +207,7 @@ export function VehicleManagementPage() {
                 filter === f ? 'bg-amber-500 text-navy-900' : 'btn-secondary'
               }`}
             >
-              {f === 'all' ? 'ทั้งหมด' : f === 'impounded' ? 'ถูกนึด' : 'ปกติ'}
+              {f === 'all' ? 'ทั้งหมด' : f === 'impounded' ? 'ถูกยึด' : 'ปกติ'}
             </button>
           ))}
         </div>
@@ -242,7 +242,7 @@ export function VehicleManagementPage() {
                 {v.is_impounded ? (
                   <Badge variant="danger">
                     <span className="flex items-center gap-1">
-                      <Lock size={10} /> ถูกนึด
+                      <Lock size={10} /> ถูกยึด
                     </span>
                   </Badge>
                 ) : (
@@ -289,7 +289,7 @@ export function VehicleManagementPage() {
                     onClick={() => { setImpoundVehicle(v); setImpoundForm({ reason: '', location: '' }); }}
                     className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg bg-red-500/15 text-red-400 border border-red-500/20 hover:bg-red-500/25 transition-colors text-xs font-medium"
                   >
-                    <Lock size={13} /> นึด
+                    <Lock size={13} /> ยึด
                   </button>
                 ) : (
                   <button
@@ -381,14 +381,14 @@ export function VehicleManagementPage() {
 
       {/* Impound Modal */}
       {impoundVehicle && (
-        <Modal title={`นึดยานพาหนะ: ${impoundVehicle.license_plate}`} onClose={() => setImpoundVehicle(null)} size="md">
+        <Modal title={`ยึดยานพาหนะ: ${impoundVehicle.license_plate}`} onClose={() => setImpoundVehicle(null)} size="md">
           <div className="space-y-4">
             <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
               <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
-              <span className="text-red-400 text-sm">การนึดจะทำให้ยานพาหนะคันนี้แสดงสถานะ "ถูกนึด" ทันที</span>
+              <span className="text-red-400 text-sm">การยึดจะทำให้ยานพาหนะคันนี้แสดงสถานะ "ถูกยึด" ทันที</span>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-white mb-2">เหตุผลที่นึด *</label>
+              <label className="block text-sm font-semibold text-white mb-2">เหตุผลที่ยึด *</label>
               <input
                 className="input-field"
                 placeholder="เช่น จอดผิดกฎจราจร รถชนแล้วหนี..."
@@ -436,7 +436,7 @@ export function VehicleManagementPage() {
                 disabled={!impoundForm.reason.trim() || !impoundForm.location.trim() || impoundUploading}
                 className="bg-red-600 hover:bg-red-500 text-white font-semibold px-4 py-2 rounded-lg transition-colors text-sm flex items-center gap-2 disabled:opacity-50"
               >
-                <Lock size={16} /> {impoundUploading ? 'กำลังอัปโหลด...' : 'ยืนยันการนึด'}
+                <Lock size={16} /> {impoundUploading ? 'กำลังอัปโหลด...' : 'ยืนยันการยึด'}
               </button>
             </div>
           </div>
@@ -449,7 +449,7 @@ export function VehicleManagementPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               {viewVehicle.is_impounded ? (
-                <Badge variant="danger"><span className="flex items-center gap-1"><Lock size={10} /> ถูกนึด</span></Badge>
+                <Badge variant="danger"><span className="flex items-center gap-1"><Lock size={10} /> ถูกยึด</span></Badge>
               ) : (
                 <Badge variant="success"><span className="flex items-center gap-1"><CheckCircle2 size={10} /> ปกติ</span></Badge>
               )}
@@ -505,7 +505,7 @@ export function VehicleManagementPage() {
                   onClick={() => { setImpoundVehicle(viewVehicle); setViewVehicle(null); setImpoundForm({ reason: '', location: '' }); }}
                   className="flex items-center gap-2 bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
-                  <Lock size={15} /> นึดยานพาหนะ
+                  <Lock size={15} /> ยึดยานพาหนะ
                 </button>
               )}
               {isCommissioner && (

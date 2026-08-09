@@ -71,6 +71,7 @@ export interface ServiceRecord {
   notes: string;
   evidence_url: string | null;
   service_date: string;
+  citizen_id: string | null;
   created_at: string;
   updated_at: string;
 }
