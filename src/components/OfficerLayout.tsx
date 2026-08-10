@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import {
   Truck, LayoutDashboard, Shield, DollarSign, Megaphone,
-  Users, LogOut, Menu, X, ChevronRight, Tag, MessageSquare, Siren, Car, UserCog,
+  Users, LogOut, Menu, X, ChevronRight, Tag, MessageSquare, Siren, Car, UserCog, CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { RANK_LABELS, DEPARTMENT_LABELS } from '../lib/types';
@@ -16,7 +16,8 @@ export type OfficerPage =
   | 'officer-management'
   | 'citizen-management'
   | 'emergency'
-  | 'vehicles';
+  | 'vehicles'
+  | 'leave';
 
 interface Props {
   children: ReactNode;
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { id: 'service-fees', label: 'ค่าบริการ', icon: <DollarSign size={18} />, commissionerOnly: false },
   { id: 'emergency', label: 'แจ้งเหตุฉุกเฉิน', icon: <Siren size={18} />, commissionerOnly: false },
   { id: 'vehicles', label: 'ยานพาหนะ', icon: <Car size={18} />, commissionerOnly: false },
+  { id: 'leave', label: 'จัดการการลา', icon: <CalendarDays size={18} />, commissionerOnly: false },
   { id: 'complaints', label: 'เรื่องร้องเรียน', icon: <MessageSquare size={18} />, commissionerOnly: true },
   { id: 'announcements', label: 'ประกาศ', icon: <Megaphone size={18} />, commissionerOnly: true },
   { id: 'service-rates', label: 'อัตราค่าบริการ', icon: <Tag size={18} />, commissionerOnly: true },

@@ -261,3 +261,89 @@ export const DEPARTMENTS: Department[] = [
 
 // The commissioner rank identifier — always stored as this string in officers.rank
 export const COMMISSIONER_RANK = 'commissioner';
+
+export type LeaveType = 'sick' | 'personal' | 'vacation' | 'maternity' | 'ordained' | 'other';
+export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface OfficerLeave {
+  id: string;
+  officer_id: string | null;
+  officer_name: string;
+  leave_type: LeaveType;
+  start_date: string;
+  end_date: string;
+  status: LeaveStatus;
+  reason: string | null;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
+  sick: 'ลาป่วย',
+  personal: 'ลากิจ',
+  vacation: 'ลาพักร้อน',
+  maternity: 'ลาคลอด',
+  ordained: 'ลาบวช',
+  other: 'อื่นๆ',
+};
+
+export const LEAVE_STATUS_LABELS: Record<LeaveStatus, string> = {
+  pending: 'รอพิจารณา',
+  approved: 'อนุมัติ',
+  rejected: 'ไม่อนุมัติ',
+  cancelled: 'ยกเลิก',
+};
+
+export const VEHICLE_BRAND_MODELS: Record<string, string[]> = {
+  Toyota: ['Vios', 'Yaris', 'Corolla Altis', 'Camry', 'Fortuner', 'Hilux Revo', 'Innova', 'C-HR', 'Avanza', 'Alphard'],
+  Honda: ['Civic', 'City', 'Accord', 'HR-V', 'CR-V', 'BR-V', 'Jazz', 'Brio', 'HR-V e:HEV', 'Civic Type R'],
+  Nissan: ['Almera', 'Sylphy', 'Navara', 'Terra', 'Kicks e-Power', 'Almera Turbo', 'GT-R'],
+  Mazda: ['2', '3', 'CX-3', 'CX-30', 'CX-5', 'CX-8', 'CX-9', 'MX-5', 'BT-50'],
+  Mitsubishi: ['Mirage', 'Attrage', 'Xpander', 'Pajero Sport', 'Triton', 'Outlander', 'Eclipse Cross'],
+  Suzuki: ['Swift', 'Ciaz', 'XL7', 'Ertiga', 'Jimny', 'Vitara', 'S-Presso', 'Carry'],
+  Ford: ['Ranger', 'Everest', 'Focus', 'Fiesta', 'EcoSport', 'Territory', 'Mustang', 'Raptor'],
+  Chevrolet: ['Aveo', 'Sail', 'Trailblazer', 'Colorado', 'Spark', 'Cruze', 'Captiva'],
+  Isuzu: ['D-Max', 'MU-X', 'M-Series', 'N-Series'],
+  MG: ['MG3', 'MG ZS', 'MG HS', 'MG Extender', 'MG4 EV', 'MG5', 'MG6'],
+  BYD: ['Dolphin', 'Atto 3', 'Seal', 'M6', 'EA1', 'Song Plus'],
+  GWM: ['Haval H6', 'Haval Jolion', 'Ora Good Cat', 'Ora Black Cat', 'Poer'],
+  BMW: ['3 Series', '5 Series', '7 Series', 'X1', 'X3', 'X5', 'X7', 'M3', 'M5'],
+  Mercedes: ['A-Class', 'C-Class', 'E-Class', 'S-Class', 'GLA', 'GLC', 'GLE', 'GLS'],
+  Audi: ['A3', 'A4', 'A6', 'Q3', 'Q5', 'Q7', 'Q8', 'e-tron'],
+  Volvo: ['XC40', 'XC60', 'XC90', 'S60', 'S90', 'V60', 'V90', 'EX30', 'EX90'],
+  Porsche: ['911', 'Cayenne', 'Macan', 'Taycan', 'Panamera', '718 Cayman'],
+  Tesla: ['Model 3', 'Model S', 'Model X', 'Model Y', 'Cybertruck'],
+  Hyundai: ['Elantra', 'Accent', 'Tucson', 'Santa Fe', 'IONIQ 5', 'IONIQ 6', 'Creta'],
+  Kia: ['Cerato', 'Seltos', 'Sportage', 'Sorento', 'EV6', 'Picanto', 'Morning'],
+  Subaru: ['Impreza', 'XV', 'Forester', 'Outback', 'Crosstrek', 'BRZ'],
+  Lexus: ['IS', 'ES', 'RX', 'NX', 'LX', 'UX', 'LC', 'RC'],
+  'อื่นๆ': ['อื่นๆ'],
+};
+
+export const VEHICLE_COLORS: { label: string; value: string }[] = [
+  { label: 'สีขาว', value: 'ขาว' },
+  { label: 'สีดำ', value: 'ดำ' },
+  { label: 'สีเงิน', value: 'เงิน' },
+  { label: 'สีเทา', value: 'เทา' },
+  { label: 'สีแดง', value: 'แดง' },
+  { label: 'สีน้ำเงิน', value: 'น้ำเงิน' },
+  { label: 'สีน้ำตาล', value: 'น้ำตาล' },
+  { label: 'สีเขียว', value: 'เขียว' },
+  { label: 'สีเหลือง', value: 'เหลือง' },
+  { label: 'สีส้ม', value: 'ส้ม' },
+  { label: 'สีม่วง', value: 'ม่วง' },
+  { label: 'สีชมพู', value: 'ชมพู' },
+  { label: 'สีทอง', value: 'ทอง' },
+  { label: 'สีนากี', value: 'นากี' },
+  { label: 'สีฟ้า', value: 'ฟ้า' },
+  { label: 'สีครีม', value: 'ครีม' },
+  { label: 'สีเบจ', value: 'เบจ' },
+  { label: 'สีไวน์แดง', value: 'ไวน์แดง' },
+  { label: 'สีน้ำตาลเข้ม', value: 'น้ำตาลเข้ม' },
+  { label: 'สีเทาเข้ม', value: 'เทาเข้ม' },
+  { label: 'สีอื่นๆ', value: 'อื่นๆ' },
+];

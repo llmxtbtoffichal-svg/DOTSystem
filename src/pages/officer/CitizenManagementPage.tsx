@@ -2,13 +2,14 @@ import { ReactNode, useEffect, useState } from 'react';
 import {
   Search, UserCog, Plus, Edit2, Trash2, Car, CreditCard, X,
   AlertCircle, CheckCircle2, Lock, User, FileText, Clock, MapPin,
-  Bike, Truck as TowTruck, CarFront, Shield, Save, DollarSign, Eye,
+  Bike, Truck as TowTruck, CarFront, Shield, Save, DollarSign, Eye, Upload,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { uploadImage, deleteImage } from '../../lib/storage';
 import {
   Citizen, CitizenStatus, Vehicle, License, ServiceRecord, ServiceRate, ServiceType,
   VEHICLE_TYPE_LABELS, VEHICLE_CATEGORY_LABELS, CITIZEN_STATUS_LABELS,
-  VehicleType,
+  VehicleType, VEHICLE_BRAND_MODELS, VEHICLE_COLORS,
 } from '../../lib/types';
 import { useAuth } from '../../lib/AuthContext';
 import { Badge } from '../../components/Badge';
@@ -38,7 +39,7 @@ export function CitizenManagementPage() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [vehicleForm, setVehicleForm] = useState({
     license_plate: '', owner_name: '', vehicle_type: 'sedan' as VehicleType,
-    color: '', brand_model: '', vehicle_category: 'personal', is_impounded: false,
+    color: '', brand: '', model: '', brand_model: '', vehicle_category: 'personal', is_impounded: false,
     impound_reason: '', impound_location: '', notes: '',
   });
 
@@ -56,10 +57,24 @@ export function CitizenManagementPage() {
     status: 'unpaid' as 'paid' | 'unpaid', service_type: 'normal' as ServiceType,
     notes: '', service_date: new Date().toISOString().slice(0, 16),
   });
+  const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<{ type: 'citizen' | 'vehicle' | 'license' | 'fee'; id: string; name: string } | null>(null);
 
-  useEffect(() => { fetchCitizens(); }, []);
+  useEffect(() => {
+    fetchCitizens();
+    fetchRates();
+
+    const citCh = supabase.channel('citizens_rt_mgmt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'citizens' }, () => fetchCitizens())
+      .subscribe();
+    const rateCh = supabase.channel('service_rates_rt_mgmt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_rates' }, () => fetchRates())
+      .subscribe();
+    return () => { supabase.removeChannel(citCh); supabase.removeChannel(rateCh); };
+  }, []);
 
   async function fetchCitizens() {
     setLoading(true);
@@ -86,8 +101,22 @@ export function CitizenManagementPage() {
   async function selectCitizen(c: Citizen) {
     setSelectedCitizen(c);
     setTab('overview');
-    await Promise.all([fetchVehicles(c.id), fetchLicenses(c.id), fetchFees(c.id), fetchRates()]);
+    await Promise.all([fetchVehicles(c.id), fetchLicenses(c.id), fetchFees(c.id)]);
   }
+
+  useEffect(() => {
+    if (!selectedCitizen) return;
+    const vehCh = supabase.channel('vehicles_rt_' + selectedCitizen.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles', filter: 'citizen_id=eq.' + selectedCitizen.id }, () => fetchVehicles(selectedCitizen.id))
+      .subscribe();
+    const licCh = supabase.channel('licenses_rt_' + selectedCitizen.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'licenses', filter: 'citizen_id=eq.' + selectedCitizen.id }, () => fetchLicenses(selectedCitizen.id))
+      .subscribe();
+    const feeCh = supabase.channel('fees_rt_' + selectedCitizen.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_records', filter: 'citizen_id=eq.' + selectedCitizen.id }, () => fetchFees(selectedCitizen.id))
+      .subscribe();
+    return () => { supabase.removeChannel(vehCh); supabase.removeChannel(licCh); supabase.removeChannel(feeCh); };
+  }, [selectedCitizen?.id]);
 
   async function fetchVehicles(citizenId: string) {
     const { data } = await supabase.from('vehicles').select('*').eq('citizen_id', citizenId).order('created_at', { ascending: false });
@@ -165,7 +194,7 @@ export function CitizenManagementPage() {
     setEditingVehicle(null);
     setVehicleForm({
       license_plate: '', owner_name: selectedCitizen.roblox_username,
-      vehicle_type: 'sedan' as VehicleType, color: '', brand_model: '',
+      vehicle_type: 'sedan' as VehicleType, color: '', brand: '', model: '', brand_model: '',
       vehicle_category: 'personal', is_impounded: false,
       impound_reason: '', impound_location: '', notes: '',
     });
@@ -174,9 +203,27 @@ export function CitizenManagementPage() {
 
   function openEditVehicle(v: Vehicle) {
     setEditingVehicle(v);
+    const brandModel = v.brand_model || '';
+    let brand = '';
+    let model = '';
+    for (const [b, models] of Object.entries(VEHICLE_BRAND_MODELS)) {
+      if (brandModel.startsWith(b + ' ')) {
+        brand = b;
+        model = brandModel.slice(b.length + 1);
+        break;
+      } else if (brandModel === b) {
+        brand = b;
+        model = '';
+        break;
+      }
+    }
+    if (!brand && brandModel) {
+      brand = 'อื่นๆ';
+      model = brandModel;
+    }
     setVehicleForm({
       license_plate: v.license_plate, owner_name: v.owner_name || '',
-      vehicle_type: v.vehicle_type, color: v.color || '', brand_model: v.brand_model || '',
+      vehicle_type: v.vehicle_type, color: v.color || '', brand, model, brand_model: brandModel,
       vehicle_category: v.vehicle_category || 'personal', is_impounded: v.is_impounded,
       impound_reason: v.impound_reason || '', impound_location: v.impound_location || '',
       notes: v.notes || '',
@@ -187,12 +234,15 @@ export function CitizenManagementPage() {
   async function handleVehicleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedCitizen || !vehicleForm.license_plate.trim()) return;
+    const brandModel = vehicleForm.brand === 'อื่นๆ'
+      ? vehicleForm.model.trim()
+      : [vehicleForm.brand, vehicleForm.model].filter(Boolean).join(' ').trim();
     const payload = {
       license_plate: vehicleForm.license_plate.trim().toUpperCase().split(' ').join(''),
       owner_name: vehicleForm.owner_name.trim() || null,
       vehicle_type: vehicleForm.vehicle_type,
-      color: vehicleForm.color.trim() || null,
-      brand_model: vehicleForm.brand_model.trim() || null,
+      color: vehicleForm.color || null,
+      brand_model: brandModel || null,
       vehicle_category: vehicleForm.vehicle_category,
       citizen_id: selectedCitizen.id,
       is_impounded: vehicleForm.is_impounded,
@@ -283,6 +333,8 @@ export function CitizenManagementPage() {
       status: 'unpaid', service_type: 'normal',
       notes: '', service_date: new Date().toISOString().slice(0, 16),
     });
+    setEvidenceFile(null);
+    setEvidencePreview(null);
     setShowFeeForm(true);
   }
 
@@ -294,7 +346,18 @@ export function CitizenManagementPage() {
       status: f.status, service_type: f.service_type,
       notes: f.notes, service_date: new Date(f.service_date).toISOString().slice(0, 16),
     });
+    setEvidenceFile(null);
+    setEvidencePreview(f.evidence_url ?? null);
     setShowFeeForm(true);
+  }
+
+  function handleEvidenceSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEvidenceFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setEvidencePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
   }
 
   function handleRateSelect(rateId: string) {
@@ -310,6 +373,20 @@ export function CitizenManagementPage() {
   async function handleFeeSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedCitizen || !feeForm.service_name.trim()) return;
+    setUploading(true);
+
+    let evidenceUrl = editingFee?.evidence_url ?? null;
+    if (evidenceFile) {
+      const uploaded = await uploadImage(evidenceFile, 'evidence');
+      if (uploaded) {
+        if (editingFee?.evidence_url) deleteImage(editingFee.evidence_url);
+        evidenceUrl = uploaded;
+      }
+    } else if (!evidencePreview && editingFee?.evidence_url) {
+      deleteImage(editingFee.evidence_url);
+      evidenceUrl = null;
+    }
+
     const payload = {
       roblox_username: selectedCitizen.roblox_username,
       discord_username: selectedCitizen.discord_username || '',
@@ -322,6 +399,7 @@ export function CitizenManagementPage() {
       officer_id: officer?.id ?? null,
       officer_name: officer?.name ?? '',
       notes: feeForm.notes,
+      evidence_url: evidenceUrl,
       service_date: new Date(feeForm.service_date).toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -330,6 +408,7 @@ export function CitizenManagementPage() {
     } else {
       await supabase.from('service_records').insert(payload);
     }
+    setUploading(false);
     setShowFeeForm(false);
     await fetchFees(selectedCitizen.id);
   }
@@ -343,6 +422,8 @@ export function CitizenManagementPage() {
 
   async function deleteFee(id: string) {
     if (!selectedCitizen) return;
+    const rec = feeRecords.find((r) => r.id === id);
+    if (rec?.evidence_url) deleteImage(rec.evidence_url);
     await supabase.from('service_records').delete().eq('id', id);
     await fetchFees(selectedCitizen.id);
   }
@@ -745,8 +826,22 @@ export function CitizenManagementPage() {
                 <input className="input-field uppercase" placeholder="กข1234" value={vehicleForm.license_plate} onChange={(e) => setVehicleForm({ ...vehicleForm, license_plate: e.target.value })} autoFocus />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1.5">ยี่ห้อ/รุ่น</label>
-                <input className="input-field" placeholder="เช่น Honda Civic" value={vehicleForm.brand_model} onChange={(e) => setVehicleForm({ ...vehicleForm, brand_model: e.target.value })} />
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">ยี่ห้อรถ</label>
+                <select className="input-field" value={vehicleForm.brand} onChange={(e) => setVehicleForm({ ...vehicleForm, brand: e.target.value, model: '' })}>
+                  <option value="">-- เลือกยี่ห้อ --</option>
+                  {Object.keys(VEHICLE_BRAND_MODELS).map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">รุ่น</label>
+                {vehicleForm.brand === 'อื่นๆ' ? (
+                  <input className="input-field" placeholder="กรอกรุ่นรถ" value={vehicleForm.model} onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })} />
+                ) : (
+                  <select className="input-field" value={vehicleForm.model} onChange={(e) => setVehicleForm({ ...vehicleForm, model: e.target.value })}>
+                    <option value="">-- เลือกรุ่น --</option>
+                    {(vehicleForm.brand ? VEHICLE_BRAND_MODELS[vehicleForm.brand] || [] : []).map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">ประเภทรถ</label>
@@ -762,7 +857,10 @@ export function CitizenManagementPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">สี</label>
-                <input className="input-field" placeholder="สีรถ" value={vehicleForm.color} onChange={(e) => setVehicleForm({ ...vehicleForm, color: e.target.value })} />
+                <select className="input-field" value={vehicleForm.color} onChange={(e) => setVehicleForm({ ...vehicleForm, color: e.target.value })}>
+                  <option value="">-- เลือกสี --</option>
+                  {VEHICLE_COLORS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-400 mb-1.5">ชื่อเจ้าของ</label>
@@ -899,9 +997,35 @@ export function CitizenManagementPage() {
               <label className="block text-xs font-medium text-gray-400 mb-1.5">หมายเหตุ</label>
               <textarea className="input-field resize-none" rows={2} placeholder="หมายเหตุ..." value={feeForm.notes} onChange={(e) => setFeeForm({ ...feeForm, notes: e.target.value })} />
             </div>
+
+            {/* Evidence Image Upload */}
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">รูปภาพหลักฐานการใช้บริการ</label>
+              {evidencePreview ? (
+                <div className="relative group">
+                  <img src={evidencePreview} alt="evidence" className="w-full max-h-56 object-contain rounded-lg border border-blue-900/50 bg-navy-900" />
+                  <button
+                    type="button"
+                    onClick={() => { setEvidencePreview(null); setEvidenceFile(null); }}
+                    className="absolute top-2 right-2 w-7 h-7 bg-red-600 rounded-lg flex items-center justify-center opacity-90 hover:opacity-100"
+                  >
+                    <X size={16} className="text-white" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-blue-900/50 rounded-lg cursor-pointer hover:border-amber-500/40 hover:bg-navy-700/30 transition-all">
+                  <Upload size={24} className="text-gray-600" />
+                  <span className="text-xs text-gray-500">คลิกเพื่ออัปโหลดสลิป / ใบเสร็จ / รูปหลักฐาน</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleEvidenceSelect} />
+                </label>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setShowFeeForm(false)} className="btn-secondary flex-1">ยกเลิก</button>
-              <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2"><Save size={16} /> บันทึก</button>
+              <button type="submit" disabled={uploading} className="btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
+                {uploading ? 'กำลังอัปโหลด...' : <><Save size={16} /> บันทึก</>}
+              </button>
             </div>
           </form>
         </Modal>

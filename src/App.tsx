@@ -24,6 +24,7 @@ import { CitizenManagementPage } from './pages/officer/CitizenManagementPage';
 import { ComplaintsManagementPage } from './pages/officer/ComplaintsManagementPage';
 import { EmergencyManagementPage } from './pages/officer/EmergencyManagementPage';
 import { VehicleManagementPage } from './pages/officer/VehicleManagementPage';
+import { LeaveManagementPage } from './pages/officer/LeaveManagementPage';
 
 // Access Denied
 import { ShieldOff } from 'lucide-react';
@@ -76,6 +77,7 @@ function OfficerApp() {
           {currentPage === 'citizen-management' && isCommissioner && <CitizenManagementPage />}
           {currentPage === 'emergency' && <EmergencyManagementPage />}
           {currentPage === 'vehicles' && <VehicleManagementPage />}
+          {currentPage === 'leave' && <LeaveManagementPage />}
         </>
       )}
     </OfficerLayout>

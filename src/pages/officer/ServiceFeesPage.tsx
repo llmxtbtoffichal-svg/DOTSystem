@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, DollarSign, Edit2, Trash2, Image as ImageIcon, Upload, X, Eye, Car, Lock } from 'lucide-react';
+import { Plus, Search, DollarSign, Edit2, Trash2, Image as ImageIcon, Upload, X, Eye, Car, Lock, User } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { uploadImage, deleteImage } from '../../lib/storage';
-import { ServiceRecord, ServiceRate, ServiceType } from '../../lib/types';
+import { ServiceRecord, ServiceRate, ServiceType, Citizen } from '../../lib/types';
 import { useAuth } from '../../lib/AuthContext';
 import { Badge } from '../../components/Badge';
 import { Modal, ConfirmDialog } from '../../components/Modal';
@@ -11,6 +11,9 @@ export function ServiceFeesPage() {
   const { officer, isCommissioner } = useAuth();
   const [records, setRecords] = useState<ServiceRecord[]>([]);
   const [rates, setRates] = useState<ServiceRate[]>([]);
+  const [citizens, setCitizens] = useState<Citizen[]>([]);
+  const [citizenSearch, setCitizenSearch] = useState('');
+  const [selectedCitizenId, setSelectedCitizenId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
@@ -35,10 +38,23 @@ export function ServiceFeesPage() {
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [evidencePreview, setEvidencePreview] = useState<string | null>(null);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    fetchAll();
+    fetchCitizens();
+
+    const recCh = supabase.channel('service_records_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_records' }, () => fetchAll())
+      .subscribe();
+    const rateCh = supabase.channel('service_rates_rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_rates' }, () => fetchAll())
+      .subscribe();
+    const citCh = supabase.channel('citizens_rt_fees')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'citizens' }, () => fetchCitizens())
+      .subscribe();
+    return () => { supabase.removeChannel(recCh); supabase.removeChannel(rateCh); supabase.removeChannel(citCh); };
+  }, []);
 
   async function fetchAll() {
-    setLoading(true);
     const [rec, rateData] = await Promise.all([
       supabase.from('service_records').select('*').order('service_date', { ascending: false }),
       supabase.from('service_rates').select('*').eq('is_active', true).order('name'),
@@ -46,6 +62,25 @@ export function ServiceFeesPage() {
     setRecords(rec.data ?? []);
     setRates(rateData.data ?? []);
     setLoading(false);
+  }
+
+  async function fetchCitizens() {
+    const { data } = await supabase.from('citizens').select('*').order('roblox_username', { ascending: true });
+    setCitizens(data ?? []);
+  }
+
+  const filteredCitizens = citizens.filter((c) => {
+    if (!citizenSearch.trim()) return true;
+    const q = citizenSearch.toLowerCase();
+    return c.roblox_username.toLowerCase().includes(q) || (c.discord_username || '').toLowerCase().includes(q);
+  });
+
+  function handleCitizenSelect(citizenId: string) {
+    setSelectedCitizenId(citizenId);
+    const c = citizens.find((x) => x.id === citizenId);
+    if (c) {
+      setForm((f) => ({ ...f, roblox_username: c.roblox_username, discord_username: c.discord_username || '' }));
+    }
   }
 
   function resetForm() {
@@ -57,6 +92,7 @@ export function ServiceFeesPage() {
     });
     setEvidenceFile(null);
     setEvidencePreview(null);
+    setSelectedCitizenId('');
   }
 
   function handleEvidenceSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -88,6 +124,7 @@ export function ServiceFeesPage() {
     const payload = {
       roblox_username: form.roblox_username,
       discord_username: form.discord_username,
+      citizen_id: selectedCitizenId || null,
       service_rate_id: form.service_rate_id || null,
       service_name: form.service_name,
       amount: parseFloat(form.amount) || 0,
@@ -115,6 +152,7 @@ export function ServiceFeesPage() {
 
   function openEdit(rec: ServiceRecord) {
     setEditRecord(rec);
+    setSelectedCitizenId(rec.citizen_id ?? '');
     setForm({
       roblox_username: rec.roblox_username,
       discord_username: rec.discord_username,
@@ -291,6 +329,32 @@ export function ServiceFeesPage() {
       {showAdd && (
         <Modal title={editRecord ? 'แก้ไขรายการค่าบริการ' : 'เพิ่มรายการค่าบริการ'} onClose={() => { setShowAdd(false); setEditRecord(null); resetForm(); }} size="lg">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Citizen Selector */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">เลือกประชาชน (จากระบบจัดการประชาชน)</label>
+              <div className="relative">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input
+                  className="input-field pl-9 mb-2"
+                  placeholder="ค้นหาชื่อ Roblox หรือ Discord..."
+                  value={citizenSearch}
+                  onChange={(e) => setCitizenSearch(e.target.value)}
+                />
+              </div>
+              <select
+                className="input-field"
+                value={selectedCitizenId}
+                onChange={(e) => handleCitizenSelect(e.target.value)}
+              >
+                <option value="">-- เลือกประชาชน (หรือกรอกชื่อด้วยตัวเองด้านล่าง) --</option>
+                {filteredCitizens.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.roblox_username}{c.discord_username ? ' (@' + c.discord_username + ')' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Roblox Username</label>
