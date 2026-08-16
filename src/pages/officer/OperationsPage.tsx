@@ -188,7 +188,7 @@ export function OperationsPage() {
     return h > 0 ? `${h}ชม. ${m}น.` : `${m}น.`;
   };
 
-  const dutyEnabled = settings?.duty_system_enabled ?? true;
+  const dutyEnabled = true;
 
   return (
     <div>
