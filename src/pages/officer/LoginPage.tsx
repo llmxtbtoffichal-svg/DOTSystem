@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Truck, LogIn, Eye, EyeOff, AlertCircle, Lock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Truck, LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { hashPassword } from '../../lib/crypto';
 import { Officer } from '../../lib/types';
@@ -15,18 +15,6 @@ export function LoginPage({ onLogin, onBack }: Props) {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [loginEnabled, setLoginEnabled] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    supabase
-      .from('system_settings')
-      .select('login_enabled')
-      .eq('id', 1)
-      .maybeSingle()
-      .then(({ data }) => {
-        setLoginEnabled(data ? data.login_enabled : true);
-      });
-  }, []);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -34,57 +22,46 @@ export function LoginPage({ onLogin, onBack }: Props) {
     setLoading(true);
     setError('');
 
-    const hash = await hashPassword(password);
+    try {
+      const hash = await hashPassword(password);
 
-    const { data, error: err } = await supabase
-      .from('officers')
-      .select('*')
-      .eq('username', username.trim())
-      .maybeSingle();
+      // ค้นหาเจ้าหน้าที่จากตาราง officers ด้วย username
+      const { data, error: err } = await supabase
+        .from('officers')
+        .select('*')
+        .eq('username', username.trim())
+        .maybeSingle();
 
-    if (err || !data) {
-      setError('ไม่พบบัญชีผู้ใช้นี้ในระบบ');
+      if (err) {
+        setError('เกิดข้อผิดพลาดในการเชื่อมต่อระบบ กรุณาลองใหม่อีกครั้ง');
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setError('ไม่พบบัญชีผู้ใช้นี้ในระบบ');
+        setLoading(false);
+        return;
+      }
+
+      if (data.status === 'deleted' || data.status === 'suspended') {
+        setError('บัญชีนี้ถูกระงับหรือลบออกจากระบบ กรุณาติดต่อหัวหน้ากรม');
+        setLoading(false);
+        return;
+      }
+
+      if (data.password_hash !== hash) {
+        setError('รหัสผ่านไม่ถูกต้อง');
+        setLoading(false);
+        return;
+      }
+
+      onLogin(data as Officer);
+    } catch {
+      setError('เกิดข้อผิดพลาดที่ไม่คาดคิด กรุณาลองใหม่อีกครั้ง');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (data.status === 'deleted' || data.status === 'suspended') {
-      setError('บัญชีนี้ถูกระงับหรือลบออกจากระบบ กรุณาติดต่อหัวหน้ากรม');
-      setLoading(false);
-      return;
-    }
-
-    if (data.password_hash !== hash) {
-      setError('รหัสผ่านไม่ถูกต้อง');
-      setLoading(false);
-      return;
-    }
-
-    onLogin(data as Officer);
-    setLoading(false);
-  }
-if (false) {
-    return (
-      <div className="min-h-screen bg-navy-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex w-16 h-16 bg-red-500/10 border-2 border-red-500/30 rounded-2xl items-center justify-center mb-4">
-              <Lock size={30} className="text-red-400" />
-            </div>
-            <div className="text-xs text-amber-500 font-semibold tracking-widest mb-1">BIT CITIES</div>
-            <h1 className="text-2xl font-black text-white">DOT System</h1>
-          </div>
-          <div className="card p-8 text-center">
-            <h2 className="text-lg font-semibold text-white mb-3">ระบบเข้าสู่ระบบถูกปิดชั่วคราว</h2>
-            <p className="text-gray-400 text-sm mb-6">
-              ขณะนี้ระบบเข้าสู่ระบบสำหรับเจ้าหน้าที่ถูกปิดโดยหัวหน้ากรมขนส่ง
-              อาจเป็นช่วงปิดกะหรือปรับปรุงระบบ กรุณากลับมาใหม่ภายหลัง
-            </p>
-            <button onClick={onBack} className="btn-secondary w-full py-3">กลับหน้าแรก</button>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (

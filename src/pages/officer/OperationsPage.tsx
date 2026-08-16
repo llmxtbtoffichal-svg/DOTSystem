@@ -24,7 +24,27 @@ export function OperationsPage() {
 
   useEffect(() => {
     fetchData();
-  }, [officer?.id]);
+
+    // Real-time: ฟังการเปลี่ยนแปลงของตาราง officers, duty_logs และ system_settings
+    // เพื่อให้หน้าจออัปเดตทันทีเมื่อมีการเข้า-ออกเวรหรือปรับตั้งค่าระบบ
+    const channel = supabase
+      .channel('operations-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'officers' }, () => {
+        fetchData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'duty_logs' }, () => {
+        fetchData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [officer?.id, isCommissioner]);
 
   async function fetchData() {
     setLoading(true);
@@ -188,7 +208,7 @@ export function OperationsPage() {
     return h > 0 ? `${h}ชม. ${m}น.` : `${m}น.`;
   };
 
-  const dutyEnabled = true;
+  const dutyEnabled = settings?.duty_system_enabled ?? true;
 
   return (
     <div>
